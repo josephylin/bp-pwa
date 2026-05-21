@@ -364,8 +364,8 @@
 /* =========================================================
  *  設定區（與 Code.gs 對應）
  * ========================================================= */
-const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwp5HNnP_kXJ4yIfqQ-ct4aU2LYG2D9QwAxO5ZpVjJnupw7pI9GB22qAJQVsummTKbLfQ/exec';
-const SECRET   = 'CHANGE_LIN_to_a_random_string';
+const ENDPOINT = 'https://script.google.com/macros/s/REPLACE_WITH_YOUR_DEPLOYMENT_ID/exec';
+const SECRET   = 'CHANGE_ME_to_a_random_string';
 
 const MORNING_HOURS = [5, 11];     // 05:00 - 10:59
 const EVENING_HOURS = [18, 26];    // 18:00 - 隔日 01:59
@@ -492,9 +492,10 @@ function updateUI() {
 
   const todays = getTodaySessionRecords(session);
   const nextPair = todays.length + 1;
-  $('nextPair').textContent = nextPair;
-  $('pairHint').querySelector('strong').innerHTML =
-    `今日${session==='morning'?'早晨':'晚間'}第 ${nextPair} 次量測`;
+  const strongEl = $('pairHint').querySelector('strong');
+  if (strongEl) {
+    strongEl.textContent = `今日${session==='morning'?'早晨':'晚間'}第 ${nextPair} 次量測`;
+  }
 
   if (todays.length > 0) {
     const sbp = avgOf(todays,'systolic'), dbp = avgOf(todays,'diastolic');
@@ -567,6 +568,28 @@ function fillNow() {
   $('recordedAt').value = d.toISOString().slice(0,16);
 }
 
+/* 送出後清空表單，但保留手臂/姿勢（量測習慣通常不變），並把焦點移回收縮壓 */
+function resetForm() {
+  // 保留下拉選單目前選擇
+  const armKeep = $('arm').value;
+  const posKeep = $('position').value;
+
+  $('bpForm').reset();   // 一次清掉所有 input/textarea 與驗證狀態
+
+  // 復原保留欄位
+  $('arm').value = armKeep;
+  $('position').value = posKeep;
+
+  // 重新填入「現在」時間，並把焦點移到下一筆最常輸入的欄位
+  fillNow();
+  // 用 requestAnimationFrame 確保 reset 完成後再 focus
+  requestAnimationFrame(() => {
+    $('systolic').focus({ preventScroll: false });
+    // iOS Safari 在某些情況下需要 select 觸發鍵盤
+    try { $('systolic').select(); } catch(_) {}
+  });
+}
+
 /* ---------- Submit ---------- */
 $('bpForm').addEventListener('submit', (ev) => {
   ev.preventDefault();
@@ -599,8 +622,7 @@ $('bpForm').addEventListener('submit', (ev) => {
   refreshNetwork(); renderHistory(); updateUI();
   toast(`已儲存（${session==='morning'?'早晨':session==='evening'?'晚間':'其他'} 第 ${pairIndex} 次）`);
 
-  $('systolic').value = ''; $('diastolic').value = ''; $('pulse').value = ''; $('note').value = '';
-  fillNow();
+  resetForm();
   if (navigator.onLine) sync();
 });
 
