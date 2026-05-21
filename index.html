@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#01696f" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="血壓紀錄" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<link rel="manifest" href="manifest.json" />
+<title>血壓紀錄</title>
+
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+<style>
+  :root, [data-theme="light"] {
+    --text-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
+    --text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
+    --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+    --text-lg: clamp(1.125rem, 1rem + 0.75vw, 1.5rem);
+    --text-xl: clamp(1.5rem, 1.2rem + 1.25vw, 2.25rem);
+    --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem;
+    --space-4: 1rem; --space-5: 1.25rem; --space-6: 1.5rem;
+    --space-8: 2rem; --space-10: 2.5rem; --space-12: 3rem;
+    --color-bg: #f7f6f2; --color-surface: #f9f8f5; --color-surface-2: #fbfbf9;
+    --color-surface-offset: #f3f0ec; --color-border: #d4d1ca; --color-divider: #dcd9d5;
+    --color-text: #28251d; --color-text-muted: #5f5d58; --color-text-faint: #8d8a83;
+    --color-text-inverse: #f9f8f4;
+    --color-primary: #01696f; --color-primary-hover: #0c4e54;
+    --color-success: #437a22; --color-warning: #964219; --color-error: #a12c7b; --color-blue: #006494;
+    --radius-sm: 0.375rem; --radius-md: 0.5rem; --radius-lg: 0.75rem; --radius-xl: 1rem; --radius-full: 9999px;
+    --shadow-sm: 0 1px 2px oklch(0.2 0.01 80 / 0.06);
+    --shadow-md: 0 4px 12px oklch(0.2 0.01 80 / 0.08);
+    --transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    --font-body: 'Satoshi', 'Inter', -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  }
+  [data-theme="dark"] {
+    --color-bg: #171614; --color-surface: #1c1b19; --color-surface-2: #201f1d;
+    --color-surface-offset: #22211f; --color-border: #393836; --color-divider: #262523;
+    --color-text: #ece9e3; --color-text-muted: #b3aea6; --color-text-faint: #8a857d;
+    --color-text-inverse: #171614;
+    --color-primary: #4f98a3; --color-primary-hover: #227f8b;
+    --color-success: #7fbe56; --color-warning: #e09a68; --color-error: #d163a7; --color-blue: #72acd8;
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.2); --shadow-md: 0 4px 12px oklch(0 0 0 / 0.3);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: none; text-size-adjust: none; scroll-behavior: smooth; }
+  body { margin: 0; min-height: 100dvh; font-family: var(--font-body);
+    font-size: var(--text-base); background: var(--color-bg); color: var(--color-text); line-height: 1.6;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  button { cursor: pointer; border: none; background: none; }
+  input, textarea, select {
+    width: 100%;
+    border: 1px solid color-mix(in oklab, var(--color-text) 12%, transparent);
+    background: var(--color-surface-2); border-radius: var(--radius-md);
+    padding: 0.9rem 0.95rem;
+    transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none; border-color: var(--color-primary);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-primary) 18%, transparent);
+  }
+
+  .app { max-width: 760px; margin: 0 auto; padding: var(--space-4); }
+
+  /* ===== Topbar ===== */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
+  .brand { display: flex; align-items: center; gap: var(--space-3); }
+  .logo { width: 42px; height: 42px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--color-primary), color-mix(in oklab, var(--color-primary) 48%, white));
+    color: white; display: grid; place-items: center; box-shadow: var(--shadow-sm); }
+  .brand h1 { font-size: var(--text-xl); line-height: 1.1; margin: 0; }
+  .brand p { margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+  .topbar-actions { display: flex; gap: var(--space-2); }
+  .icon-btn { width: 44px; height: 44px; border-radius: var(--radius-full);
+    background: var(--color-surface);
+    border: 1px solid color-mix(in oklab, var(--color-text) 10%, transparent);
+    display: grid; place-items: center; color: var(--color-text); }
+  .icon-btn:hover { background: var(--color-surface-offset); }
+
+  /* ===== Panel ===== */
+  .panel { background: var(--color-surface);
+    border: 1px solid color-mix(in oklab, var(--color-text) 8%, transparent);
+    border-radius: var(--radius-xl); padding: var(--space-4); box-shadow: var(--shadow-sm); }
+  .panel + .panel { margin-top: var(--space-4); }
+
+  .section-title { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); flex-wrap: wrap; }
+  .section-title h2 { font-size: var(--text-lg); margin: 0; }
+  .section-title p { margin: 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+
+  .pill { display: inline-flex; align-items: center; gap: 0.35rem; border-radius: var(--radius-full);
+    padding: 0.25rem 0.6rem; background: color-mix(in oklab, var(--color-primary) 12%, transparent);
+    color: var(--color-primary); font-size: var(--text-xs); font-weight: 700; }
+  .pill.warn { background: color-mix(in oklab, var(--color-warning) 16%, transparent); color: var(--color-warning); }
+  .pill.muted { background: var(--color-surface-offset); color: var(--color-text-muted); }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ===== Hero KPIs ===== */
+  .hero-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+  .stat-card { padding: var(--space-4); border-radius: var(--radius-lg);
+    background: var(--color-surface-2);
+    border: 1px solid color-mix(in oklab, var(--color-text) 8%, transparent); }
+  .stat-card span { display: block; font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-2); }
+  .stat-card strong { font-size: var(--text-lg); font-variant-numeric: tabular-nums lining-nums; }
+  .stat-card.morning { border-left: 3px solid var(--color-warning); }
+  .stat-card.evening { border-left: 3px solid var(--color-blue); }
+  .stat-card.session-count { border-left: 3px solid var(--color-primary); }
+
+  /* ===== 早/晚 Tabs ===== */
+  .session-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-bottom: var(--space-4); }
+  .session-tabs button { min-height: 56px; border-radius: var(--radius-lg);
+    background: var(--color-surface-2);
+    border: 1px solid color-mix(in oklab, var(--color-text) 8%, transparent);
+    color: var(--color-text); font-weight: 700; font-size: var(--text-sm);
+    display: flex; align-items: center; justify-content: center; gap: var(--space-2);
+    transition: all var(--transition); }
+  .session-tabs button:hover { background: var(--color-surface-offset); }
+  .session-tabs button.active.morning {
+    background: color-mix(in oklab, var(--color-warning) 14%, var(--color-surface));
+    border-color: var(--color-warning); color: var(--color-warning); }
+  .session-tabs button.active.evening {
+    background: color-mix(in oklab, var(--color-blue) 14%, var(--color-surface));
+    border-color: var(--color-blue); color: var(--color-blue); }
+
+  .hint { padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    border-left: 3px solid var(--color-primary); margin-bottom: var(--space-4); font-size: var(--text-sm); }
+  .hint.morning { border-left-color: var(--color-warning); }
+  .hint.evening { border-left-color: var(--color-blue); }
+  .hint strong { font-size: var(--text-base); }
+  .hint small { display: block; color: var(--color-text-muted); font-size: var(--text-xs); margin-top: 0.25rem; }
+
+  /* ===== Form ===== */
+  .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+  .field { display: grid; gap: var(--space-2); }
+  .field label { font-size: var(--text-sm); font-weight: 700; }
+  .field small { color: var(--color-text-faint); font-size: var(--text-xs); }
+  .full { grid-column: 1 / -1; }
+
+  .actions { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
+  .btn { min-height: 44px; padding: 0.85rem 1.1rem; border-radius: var(--radius-md);
+    font-size: var(--text-sm); font-weight: 700;
+    transition: background var(--transition), color var(--transition), transform var(--transition); }
+  .btn:active { transform: translateY(1px) scale(0.99); }
+  .btn-primary { background: var(--color-primary); color: var(--color-text-inverse); flex: 1; }
+  .btn-primary:hover { background: var(--color-primary-hover); }
+  .btn-secondary { background: var(--color-surface-offset); color: var(--color-text);
+    border: 1px solid color-mix(in oklab, var(--color-text) 10%, transparent); }
+
+  /* 即時平均區塊 */
+  .avg-card { margin-top: var(--space-4); padding: var(--space-4); border-radius: var(--radius-lg);
+    background: color-mix(in oklab, var(--color-primary) 8%, var(--color-surface-2));
+    border: 1px solid color-mix(in oklab, var(--color-primary) 24%, transparent); }
+  .avg-card .label { font-size: var(--text-xs); color: var(--color-text-muted); display: block; margin-bottom: var(--space-1); }
+  .avg-card .big { font-size: var(--text-xl); font-weight: 700; color: var(--color-primary);
+    font-variant-numeric: tabular-nums lining-nums; }
+  .avg-card .sub { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-1); }
+
+  /* ===== History ===== */
+  .history { display: grid; gap: var(--space-3); }
+  .entry { background: var(--color-surface-2);
+    border: 1px solid color-mix(in oklab, var(--color-text) 8%, transparent);
+    border-radius: var(--radius-lg); padding: var(--space-4);
+    display: grid; gap: var(--space-3); }
+  .entry-top, .entry-bottom { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+  .badge { display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.35rem 0.65rem; border-radius: var(--radius-full);
+    font-size: var(--text-xs); font-weight: 700; }
+  .normal { background: color-mix(in oklab, var(--color-success) 16%, transparent); color: var(--color-success); }
+  .high { background: color-mix(in oklab, var(--color-warning) 16%, transparent); color: var(--color-warning); }
+  .critical { background: color-mix(in oklab, var(--color-error) 16%, transparent); color: var(--color-error); }
+  .low { background: color-mix(in oklab, var(--color-blue) 16%, transparent); color: var(--color-blue); }
+  .badge.session-m { background: color-mix(in oklab, var(--color-warning) 16%, transparent); color: var(--color-warning); }
+  .badge.session-e { background: color-mix(in oklab, var(--color-blue) 16%, transparent); color: var(--color-blue); }
+  .badge.pending { background: color-mix(in oklab, var(--color-error) 14%, transparent); color: var(--color-error); }
+  .badge.synced { background: color-mix(in oklab, var(--color-success) 16%, transparent); color: var(--color-success); }
+  .metrics { display: flex; gap: var(--space-4); flex-wrap: wrap;
+    font-variant-numeric: tabular-nums lining-nums; }
+  .metrics strong { font-size: var(--text-base); }
+  .muted { color: var(--color-text-muted); }
+  .empty { text-align: center; padding: var(--space-8) var(--space-4);
+    color: var(--color-text-muted); background: var(--color-surface-2);
+    border-radius: var(--radius-lg);
+    border: 1px dashed color-mix(in oklab, var(--color-text) 14%, transparent); }
+  .footer-note { margin-top: var(--space-4); font-size: var(--text-xs); color: var(--color-text-faint); }
+
+  /* Toast */
+  .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom));
+    transform: translateX(-50%) translateY(8px); background: var(--color-text);
+    color: var(--color-text-inverse); padding: 0.75rem 1.1rem;
+    border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 500;
+    opacity: 0; transition: opacity var(--transition), transform var(--transition);
+    z-index: 99; max-width: 90%; text-align: center; box-shadow: var(--shadow-md); }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 640px) {
+    .app { padding: var(--space-3); }
+    .hero-grid, .form-grid { grid-template-columns: 1fr; }
+    .actions { flex-direction: column; }
+    .btn { width: 100%; }
+    .brand h1 { font-size: 1.4rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+<main class="app">
+
+  <!-- ====== 頂部 ====== -->
+  <section class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Pulse log logo">
+          <path d="M3 12H7L9.2 7.5L12.3 16L14.8 10.5L16.2 12H21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <h1>血壓紀錄</h1>
+        <p>HBPM 雙次平均 · 離線可用 · 自動同步</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <a class="icon-btn" href="stats.html" aria-label="週月分析" title="週月分析">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/>
+        </svg>
+      </a>
+      <button class="icon-btn" data-theme-toggle aria-label="切換深色模式"></button>
+    </div>
+  </section>
+
+  <!-- ====== 今日概況 ====== -->
+  <section class="panel">
+    <div class="section-title">
+      <div>
+        <h2>今日概況</h2>
+        <p id="todayHint">依本日早晚紀錄即時計算</p>
+      </div>
+      <span class="pill" id="netPill"><span class="dot"></span>線上</span>
+    </div>
+    <div class="hero-grid">
+      <article class="stat-card morning">
+        <span>☀️ 今日早晨平均</span>
+        <strong id="todayMorning">-- / --</strong>
+      </article>
+      <article class="stat-card evening">
+        <span>🌙 今日晚間平均</span>
+        <strong id="todayEvening">-- / --</strong>
+      </article>
+      <article class="stat-card session-count">
+        <span>待同步</span>
+        <strong id="queueCount">0 筆</strong>
+      </article>
+    </div>
+  </section>
+
+  <!-- ====== 新增紀錄 ====== -->
+  <section class="panel">
+    <div class="section-title">
+      <div>
+        <h2>新增紀錄</h2>
+        <p>建議休息 5 分鐘後量測，間隔 1–2 分鐘量兩次</p>
+      </div>
+    </div>
+
+    <!-- 時段切換 -->
+    <div class="session-tabs">
+      <button id="tabMorning" class="morning active" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+        早晨（起床後）
+      </button>
+      <button id="tabEvening" class="evening" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3A7 7 0 0 0 21 12.79z"/>
+        </svg>
+        晚間（睡前）
+      </button>
+    </div>
+
+    <div id="pairHint" class="hint morning">
+      <strong>今日早晨第 <span id="nextPair">1</span> 次量測</strong>
+      <small>休息 5 分鐘後量第 1 次 → 間隔 1–2 分鐘 → 量第 2 次 → 系統自動取平均</small>
+    </div>
+
+    <form id="bpForm">
+      <div class="form-grid">
+        <div class="field">
+          <label for="recordedAt">量測時間</label>
+          <input id="recordedAt" name="recordedAt" type="datetime-local" required />
+        </div>
+        <div class="field">
+          <label for="pulse">心跳</label>
+          <input id="pulse" name="pulse" type="number" inputmode="numeric" min="30" max="220" placeholder="例如 72" />
+        </div>
+        <div class="field">
+          <label for="systolic">收縮壓 SYS</label>
+          <input id="systolic" name="systolic" type="number" inputmode="numeric" min="60" max="260" placeholder="例如 120" required />
+          <small>上壓</small>
+        </div>
+        <div class="field">
+          <label for="diastolic">舒張壓 DIA</label>
+          <input id="diastolic" name="diastolic" type="number" inputmode="numeric" min="40" max="180" placeholder="例如 80" required />
+          <small>下壓</small>
+        </div>
+        <div class="field">
+          <label for="arm">手臂</label>
+          <select id="arm">
+            <option value="left">左手</option>
+            <option value="right">右手</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="position">姿勢</label>
+          <select id="position">
+            <option value="sitting">坐姿</option>
+            <option value="lying">臥姿</option>
+            <option value="standing">站姿</option>
+          </select>
+        </div>
+        <div class="field full">
+          <label for="note">備註</label>
+          <textarea id="note" name="note" rows="2" placeholder="例如：服藥前、運動後、頭暈等"></textarea>
+        </div>
+      </div>
+
+      <!-- 即時平均 -->
+      <div class="avg-card" id="avgBox" style="display:none;">
+        <span class="label">今日 <span id="avgSessionLabel">早晨</span>平均（<span id="avgCount">0</span> 次量測）</span>
+        <div class="big"><span id="avgSBP">--</span> / <span id="avgDBP">--</span> <span style="font-size:var(--text-sm);font-weight:500;color:var(--color-text-muted);">mmHg</span></div>
+        <div class="sub" id="avgPulse"></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">儲存這一次量測</button>
+        <button class="btn btn-secondary" type="button" id="syncBtn">立即同步</button>
+      </div>
+    </form>
+
+    <p class="footer-note">提醒：本工具僅供居家紀錄參考，不取代正式醫療診斷與病歷系統。</p>
+  </section>
+
+  <!-- ====== 歷史紀錄 ====== -->
+  <section class="panel">
+    <div class="section-title">
+      <div>
+        <h2>歷史紀錄</h2>
+        <p>最新資料排在最上方 · 顯示最近 10 筆</p>
+      </div>
+      <span class="pill muted" id="storagePill">本機 0 KB</span>
+    </div>
+    <div id="history" class="history"></div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+ *  設定區（與 Code.gs 對應）
+ * ========================================================= */
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwp5HNnP_kXJ4yIfqQ-ct4aU2LYG2D9QwAxO5ZpVjJnupw7pI9GB22qAJQVsummTKbLfQ/exec';
+const SECRET   = 'CHANGE_LIN_to_a_random_string';
+
+const MORNING_HOURS = [5, 11];     // 05:00 - 10:59
+const EVENING_HOURS = [18, 26];    // 18:00 - 隔日 01:59
+
+const LS_QUEUE  = 'bp.queue';
+const LS_SYNCED = 'bp.synced';
+const LS_THEME  = 'bp.theme';
+
+/* ---------- DOM helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const toast = (msg) => {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2000);
+};
+function uuid() {
+  if (crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16);
+  });
+}
+const loadArr = (k) => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch(_) { return []; } };
+const saveArr = (k, arr) => localStorage.setItem(k, JSON.stringify(arr));
+
+/* ---------- Theme ---------- */
+const themeBtn = document.querySelector('[data-theme-toggle]');
+const root = document.documentElement;
+let theme = localStorage.getItem(LS_THEME)
+  || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+root.setAttribute('data-theme', theme);
+
+function setThemeIcon() {
+  themeBtn.innerHTML = theme === 'dark'
+    ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg>'
+    : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3A7 7 0 0 0 21 12.79z"></path></svg>';
+  themeBtn.setAttribute('aria-label', theme === 'dark' ? '切換淺色模式' : '切換深色模式');
+}
+setThemeIcon();
+themeBtn.addEventListener('click', () => {
+  theme = theme === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', theme);
+  localStorage.setItem(LS_THEME, theme);
+  setThemeIcon();
+});
+
+/* ---------- 時段判定 ---------- */
+function detectSession(date) {
+  const h = date.getHours();
+  if (h >= MORNING_HOURS[0] && h < MORNING_HOURS[1]) return 'morning';
+  if (h >= EVENING_HOURS[0] || h < (EVENING_HOURS[1] - 24)) return 'evening';
+  return 'other';
+}
+function dateKey(date) {
+  // 凌晨 00:00–01:59 視為前一晚 evening
+  const d = new Date(date.getTime() - 2 * 3600 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+/* ---------- 血壓分級（從參考檔抓） ---------- */
+function classify(sys, dia) {
+  if (sys >= 180 || dia >= 120) return { label: '立即注意', cls: 'critical' };
+  if (sys >= 140 || dia >= 90)  return { label: '偏高',     cls: 'high' };
+  if (sys < 90  || dia < 60)    return { label: '偏低',     cls: 'low' };
+  return { label: '一般範圍', cls: 'normal' };
+}
+function formatDateTime(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-TW', {
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+  }).format(d);
+}
+
+/* ---------- Tab ---------- */
+let currentSession = null;
+function setTab(session) {
+  currentSession = session;
+  $('tabMorning').classList.toggle('active', session === 'morning');
+  $('tabEvening').classList.toggle('active', session === 'evening');
+  $('pairHint').classList.toggle('morning', session === 'morning');
+  $('pairHint').classList.toggle('evening', session === 'evening');
+  updateUI();
+}
+$('tabMorning').addEventListener('click', () => setTab('morning'));
+$('tabEvening').addEventListener('click', () => setTab('evening'));
+
+/* ---------- 取得今日資料 ---------- */
+function getAllRecords() { return [...loadArr(LS_QUEUE), ...loadArr(LS_SYNCED)]; }
+function getTodaySessionRecords(session) {
+  const today = dateKey(new Date());
+  return getAllRecords()
+    .filter(r => r.session === session && dateKey(new Date(r.recordedAt)) === today)
+    .sort((a,b) => (a.recordedAt||'').localeCompare(b.recordedAt||''));
+}
+function avgOf(arr, key) {
+  const v = arr.map(r => r[key]).filter(x => typeof x === 'number');
+  return v.length ? Math.round(v.reduce((a,b)=>a+b,0)/v.length) : null;
+}
+
+/* ---------- UI update ---------- */
+function refreshNetwork() {
+  const online = navigator.onLine;
+  $('netPill').className = 'pill' + (online ? '' : ' warn');
+  $('netPill').innerHTML = `<span class="dot"></span>${online ? '線上' : '離線'}`;
+  $('queueCount').textContent = loadArr(LS_QUEUE).length + ' 筆';
+}
+function refreshTodaySummary() {
+  const m = getTodaySessionRecords('morning');
+  const e = getTodaySessionRecords('evening');
+  const ms = avgOf(m,'systolic'), md = avgOf(m,'diastolic');
+  const es = avgOf(e,'systolic'), ed = avgOf(e,'diastolic');
+  $('todayMorning').textContent = (ms && md) ? `${ms} / ${md}` : '-- / --';
+  $('todayEvening').textContent = (es && ed) ? `${es} / ${ed}` : '-- / --';
+  const total = m.length + e.length;
+  $('todayHint').textContent = total === 0
+    ? '依本日早晚紀錄即時計算' : `本日已量測 ${total} 次（早 ${m.length} / 晚 ${e.length}）`;
+}
+
+function updateUI() {
+  const session = currentSession || detectSession(new Date());
+  $('tabMorning').classList.toggle('active', session === 'morning');
+  $('tabEvening').classList.toggle('active', session === 'evening');
+  $('pairHint').classList.toggle('morning', session === 'morning');
+  $('pairHint').classList.toggle('evening', session === 'evening');
+
+  const todays = getTodaySessionRecords(session);
+  const nextPair = todays.length + 1;
+  $('nextPair').textContent = nextPair;
+  $('pairHint').querySelector('strong').innerHTML =
+    `今日${session==='morning'?'早晨':'晚間'}第 ${nextPair} 次量測`;
+
+  if (todays.length > 0) {
+    const sbp = avgOf(todays,'systolic'), dbp = avgOf(todays,'diastolic');
+    const ps  = todays.filter(r=>r.pulse).map(r=>r.pulse);
+    const pAvg = ps.length ? Math.round(ps.reduce((a,b)=>a+b,0)/ps.length) : null;
+    $('avgBox').style.display = 'block';
+    $('avgSessionLabel').textContent = session==='morning' ? '早晨' : '晚間';
+    $('avgCount').textContent = todays.length;
+    $('avgSBP').textContent = sbp;
+    $('avgDBP').textContent = dbp;
+    $('avgPulse').textContent = pAvg ? `平均心率 ${pAvg} bpm` : '';
+  } else {
+    $('avgBox').style.display = 'none';
+  }
+
+  refreshTodaySummary();
+}
+
+function renderHistory() {
+  const queue  = loadArr(LS_QUEUE).map(r => ({...r, _state:'pending'}));
+  const synced = loadArr(LS_SYNCED).map(r => ({...r, _state:'ok'}));
+  const all = [...queue, ...synced]
+    .sort((a,b) => (b.recordedAt||'').localeCompare(a.recordedAt||''))
+    .slice(0, 10);
+
+  const total = queue.length + synced.length;
+  if (all.length === 0) {
+    $('history').innerHTML = '<div class="empty">目前沒有紀錄，先新增一筆血壓資料。</div>';
+  } else {
+    $('history').innerHTML = all.map((item, idx) => {
+      const st = classify(item.systolic, item.diastolic);
+      const sessTag = item.session === 'morning'
+        ? `<span class="badge session-m">☀️ 早 #${item.pairIndex}</span>`
+        : item.session === 'evening'
+        ? `<span class="badge session-e">🌙 晚 #${item.pairIndex}</span>` : '';
+      const syncTag = item._state === 'pending'
+        ? '<span class="badge pending">待同步</span>'
+        : '<span class="badge synced">已同步</span>';
+      return `
+        <article class="entry">
+          <div class="entry-top">
+            <div>
+              <strong>${formatDateTime(item.recordedAt)}</strong>
+              <div class="muted">第 ${total - idx} 筆紀錄</div>
+            </div>
+            <span class="badge ${st.cls}">${st.label}</span>
+          </div>
+          <div class="metrics">
+            <div><span class="muted">血壓</span><br><strong>${item.systolic} / ${item.diastolic} mmHg</strong></div>
+            <div><span class="muted">心跳</span><br><strong>${item.pulse ? item.pulse + ' bpm' : '—'}</strong></div>
+            <div>${sessTag}</div>
+          </div>
+          <div class="entry-bottom">
+            <div class="muted">${item.note ? item.note : '無備註'}</div>
+            ${syncTag}
+          </div>
+        </article>`;
+    }).join('');
+  }
+  // 儲存量
+  try {
+    const used = new Blob([JSON.stringify(localStorage)]).size;
+    $('storagePill').textContent = `本機 ${(used/1024).toFixed(1)} KB`;
+  } catch(_) {}
+}
+
+function fillNow() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  $('recordedAt').value = d.toISOString().slice(0,16);
+}
+
+/* ---------- Submit ---------- */
+$('bpForm').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const systolic  = Number($('systolic').value);
+  const diastolic = Number($('diastolic').value);
+  if (!systolic || !diastolic) return;
+  if (systolic <= diastolic) {
+    toast('收縮壓通常應高於舒張壓，請再確認');
+    return;
+  }
+
+  const recordedAt = $('recordedAt').value
+    ? new Date($('recordedAt').value).toISOString()
+    : new Date().toISOString();
+  const session = currentSession || detectSession(new Date(recordedAt));
+  const sameToday = getTodaySessionRecords(session);
+  const pairIndex = sameToday.length + 1;
+
+  const record = {
+    clientId: uuid(),
+    recordedAt, session, pairIndex,
+    systolic, diastolic,
+    pulse: $('pulse').value ? Number($('pulse').value) : null,
+    arm: $('arm').value,
+    position: $('position').value,
+    note: $('note').value.trim() || ''
+  };
+  const q = loadArr(LS_QUEUE); q.push(record); saveArr(LS_QUEUE, q);
+
+  refreshNetwork(); renderHistory(); updateUI();
+  toast(`已儲存（${session==='morning'?'早晨':session==='evening'?'晚間':'其他'} 第 ${pairIndex} 次）`);
+
+  $('systolic').value = ''; $('diastolic').value = ''; $('pulse').value = ''; $('note').value = '';
+  fillNow();
+  if (navigator.onLine) sync();
+});
+
+$('syncBtn').addEventListener('click', () => {
+  if (!navigator.onLine) { toast('目前離線，恢復連線後會自動同步'); return; }
+  sync(true);
+});
+
+/* ---------- Sync ---------- */
+let _syncing = false;
+async function sync(verbose=false) {
+  if (_syncing) return;
+  const q = loadArr(LS_QUEUE);
+  if (q.length === 0) { if (verbose) toast('沒有待同步資料'); return; }
+  if (!ENDPOINT.includes('/exec')) { toast('尚未設定 ENDPOINT'); return; }
+  _syncing = true;
+  try {
+    const res = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ secret: SECRET, records: q })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'SERVER_ERROR');
+
+    const done = new Set([...(data.acceptedIds||[]), ...(data.skippedIds||[])]);
+    const remain = q.filter(r => !done.has(r.clientId));
+    const moved  = q.filter(r =>  done.has(r.clientId));
+    saveArr(LS_QUEUE, remain);
+    const synced = loadArr(LS_SYNCED).concat(moved).slice(-200);
+    saveArr(LS_SYNCED, synced);
+
+    refreshNetwork(); renderHistory(); updateUI();
+    if (verbose || moved.length) toast(`已同步 ${moved.length} 筆`);
+  } catch (err) {
+    console.warn('sync failed:', err);
+    if (verbose) toast('同步失敗：' + err.message);
+  } finally { _syncing = false; }
+}
+
+window.addEventListener('online',  () => { refreshNetwork(); sync(); });
+window.addEventListener('offline', refreshNetwork);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && navigator.onLine) sync(); });
+
+/* ---------- Service Worker ---------- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js').catch(console.warn));
+}
+
+/* ---------- Boot ---------- */
+fillNow();
+const initSession = detectSession(new Date());
+setTab(initSession === 'evening' ? 'evening' : 'morning');
+refreshNetwork(); renderHistory();
+if (navigator.onLine) sync();
+</script>
+</body>
+</html>

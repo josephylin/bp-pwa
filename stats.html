@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#01696f" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="血壓分析" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<link rel="manifest" href="manifest.json" />
+<title>血壓分析</title>
+
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+<style>
+  :root, [data-theme="light"] {
+    --text-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
+    --text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
+    --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+    --text-lg: clamp(1.125rem, 1rem + 0.75vw, 1.5rem);
+    --text-xl: clamp(1.5rem, 1.2rem + 1.25vw, 2.25rem);
+    --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem;
+    --space-4: 1rem; --space-6: 1.5rem; --space-8: 2rem;
+    --color-bg: #f7f6f2; --color-surface: #f9f8f5; --color-surface-2: #fbfbf9;
+    --color-surface-offset: #f3f0ec;
+    --color-text: #28251d; --color-text-muted: #5f5d58; --color-text-faint: #8d8a83;
+    --color-text-inverse: #f9f8f4;
+    --color-primary: #01696f; --color-primary-hover: #0c4e54;
+    --color-success: #437a22; --color-warning: #964219; --color-error: #a12c7b; --color-blue: #006494;
+    --radius-md: 0.5rem; --radius-lg: 0.75rem; --radius-xl: 1rem; --radius-full: 9999px;
+    --shadow-sm: 0 1px 2px oklch(0.2 0.01 80 / 0.06);
+    --transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    --font-body: 'Satoshi', 'Inter', -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  }
+  [data-theme="dark"] {
+    --color-bg: #171614; --color-surface: #1c1b19; --color-surface-2: #201f1d;
+    --color-surface-offset: #22211f;
+    --color-text: #ece9e3; --color-text-muted: #b3aea6; --color-text-faint: #8a857d;
+    --color-text-inverse: #171614;
+    --color-primary: #4f98a3; --color-primary-hover: #227f8b;
+    --color-success: #7fbe56; --color-warning: #e09a68; --color-error: #d163a7; --color-blue: #72acd8;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; font-family: var(--font-body);
+    font-size: var(--text-base); background: var(--color-bg); color: var(--color-text); line-height: 1.6;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  button { cursor: pointer; border: none; background: none; font: inherit; color: inherit; }
+
+  .app { max-width: 760px; margin: 0 auto; padding: var(--space-4); }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
+  .brand { display: flex; align-items: center; gap: var(--space-3); }
+  .logo { width: 42px; height: 42px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--color-primary), color-mix(in oklab, var(--color-primary) 48%, white));
+    color: white; display: grid; place-items: center; box-shadow: var(--shadow-sm); }
+  .brand h1 { font-size: var(--text-xl); line-height: 1.1; margin: 0; }
+  .brand p { margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+  .icon-btn { width: 44px; height: 44px; border-radius: var(--radius-full);
+    background: var(--color-surface);
+    border: 1px solid color-mix(in oklab, var(--color-text) 10%, transparent);
+    display: grid; place-items: center; color: var(--color-text); }
+  .icon-btn:hover { background: var(--color-surface-offset); }
+
+  .panel { background: var(--color-surface);
+    border: 1px solid color-mix(in oklab, var(--color-text) 8%, transparent);
+    border-radius: var(--radius-xl); padding: var(--space-4); box-shadow: var(--shadow-sm); }
+  .panel + .panel { margin-top: var(--space-4); }
+  .section-title { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); flex-wrap: wrap; }
+  .section-title h2 { font-size: var(--text-lg); margin: 0; }
+  .section-title p { margin: 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+  .pill { display: inline-flex; align-items: center; gap: 0.35rem; border-radius: var(--radius-full);
+    padding: 0.25rem 0.6rem; font-size: var(--text-xs); font-weight: 700;
+    background: var(--color-surface-offset); color: var(--color-text-muted); }
+  .pill.offline { background: color-mix(in oklab, var(--color-warning) 16%, transparent); color: var(--color-warning); }
+
+  /* Range tabs */
+  .range-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); margin-bottom: var(--space-4); }
+  .range-tabs button { min-height: 44px; border-radius: var(--radius-md);
+    background: var(--color-surface);
+    border: 1px solid color-mix(in oklab, var(--color-text) 10%, transparent);
+    font-weight: 700; font-size: var(--text-sm); transition: all var(--transition); }
+  .range-tabs button:hover { background: var(--color-surface-offset); }
+  .range-tabs button.active { background: var(--color-primary); color: var(--color-text-inverse); border-color: var(--color-primary); }
+
+  /* KPI grid */
+  .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+  .kpi { padding: var(--space-4); border-radius: var(--radius-lg);
+    background: var(--color-surface-2);
+    border: 1px solid color-mix(in oklab, var(--color-text) 8%, transparent); }
+  .kpi .label { font-size: var(--text-xs); color: var(--color-text-muted); display: block; margin-bottom: var(--space-2); }
+  .kpi .value { font-size: var(--text-lg); font-weight: 700; font-variant-numeric: tabular-nums lining-nums; }
+  .kpi .sub { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-2); }
+  .kpi.morning { border-left: 3px solid var(--color-warning); }
+  .kpi.evening { border-left: 3px solid var(--color-blue); }
+  .kpi.daily   { border-left: 3px solid var(--color-primary); }
+  .kpi.target.ok   { border-left: 3px solid var(--color-success); }
+  .kpi.target.ok   .value { color: var(--color-success); }
+  .kpi.target.warn { border-left: 3px solid var(--color-warning); }
+  .kpi.target.warn .value { color: var(--color-warning); }
+
+  canvas { width: 100% !important; height: 300px !important; }
+
+  table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); font-variant-numeric: tabular-nums lining-nums; }
+  th, td { padding: 0.55rem 0.4rem; text-align: right; border-bottom: 1px solid color-mix(in oklab, var(--color-text) 8%, transparent); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--color-text-muted); font-weight: 700; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; }
+  .badge-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .badge-dot.ok { background: var(--color-success); }
+  .badge-dot.no { background: var(--color-warning); }
+
+  .actions { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
+  .btn { min-height: 44px; padding: 0.85rem 1.1rem; border-radius: var(--radius-md);
+    font-size: var(--text-sm); font-weight: 700; flex: 1;
+    transition: background var(--transition), color var(--transition), transform var(--transition); }
+  .btn:active { transform: translateY(1px) scale(0.99); }
+  .btn-primary { background: var(--color-primary); color: var(--color-text-inverse); }
+  .btn-primary:hover { background: var(--color-primary-hover); }
+  .btn-secondary { background: var(--color-surface-offset); color: var(--color-text);
+    border: 1px solid color-mix(in oklab, var(--color-text) 10%, transparent); }
+
+  .legend { text-align: center; font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-3); display: flex; gap: var(--space-4); justify-content: center; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .legend .swatch { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+
+  .empty { text-align: center; padding: var(--space-8) var(--space-4); color: var(--color-text-muted);
+    background: var(--color-surface-2); border-radius: var(--radius-lg);
+    border: 1px dashed color-mix(in oklab, var(--color-text) 14%, transparent); }
+  .loading { text-align: center; padding: var(--space-8); color: var(--color-text-muted); }
+  .muted { color: var(--color-text-muted); }
+  .warn-text { color: var(--color-warning); font-weight: 700; }
+
+  @media (max-width: 640px) {
+    .app { padding: var(--space-3); }
+    .kpi-grid { grid-template-columns: 1fr 1fr; }
+    .brand h1 { font-size: 1.4rem; }
+    .actions { flex-direction: column; }
+  }
+  @media print {
+    body { background: white; }
+    .icon-btn, .actions, .range-tabs { display: none !important; }
+    .panel { box-shadow: none; border-color: #ccc; page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main class="app">
+
+  <section class="topbar">
+    <div class="brand">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/>
+        </svg>
+      </div>
+      <div>
+        <h1>血壓分析</h1>
+        <p>週 / 月 / 全期間 趨勢與達標率</p>
+      </div>
+    </div>
+    <a class="icon-btn" href="index.html" aria-label="返回紀錄" title="返回紀錄">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+    </a>
+  </section>
+
+  <section class="panel">
+    <div class="range-tabs">
+      <button data-range="week"  class="active">本週 7 天</button>
+      <button data-range="month">本月 30 天</button>
+      <button data-range="all">全部</button>
+    </div>
+    <div id="content">
+      <div class="loading">載入中…</div>
+    </div>
+  </section>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const ENDPOINT = 'https://script.google.com/macros/s/REPLACE_WITH_YOUR_DEPLOYMENT_ID/exec';
+const LS_THEME = 'bp.theme';
+
+/* Theme */
+const theme = localStorage.getItem(LS_THEME)
+  || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+document.documentElement.setAttribute('data-theme', theme);
+const isDark = theme === 'dark';
+const COLORS = {
+  morning: isDark ? '#e09a68' : '#964219',
+  evening: isDark ? '#72acd8' : '#006494',
+  daily:   isDark ? '#4f98a3' : '#01696f',
+  target:  isDark ? '#8a857d' : '#8d8a83',
+  grid:    isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+  text:    isDark ? '#ece9e3' : '#28251d',
+  axis:    isDark ? '#b3aea6' : '#28251d'
+};
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+let currentRange = 'week';
+let chart = null;
+
+async function loadStats(range) {
+  $('#content').innerHTML = '<div class="loading">載入中…</div>';
+  try {
+    const res = await fetch(`${ENDPOINT}?action=stats&range=${range}`);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'SERVER_ERROR');
+    render(data, false);
+  } catch (err) {
+    console.warn('API 失敗，改用本機資料：', err);
+    render(computeLocalStats(range), true);
+  }
+}
+
+/* 離線本機計算 */
+function computeLocalStats(range) {
+  const days = range === 'month' ? 30 : (range === 'all' ? 9999 : 7);
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days + 1); cutoff.setHours(0,0,0,0);
+  const TARGET_SBP = 130, TARGET_DBP = 80;
+  const all = [
+    ...(JSON.parse(localStorage.getItem('bp.synced')||'[]')),
+    ...(JSON.parse(localStorage.getItem('bp.queue')||'[]'))
+  ];
+  const byDay = {};
+  all.forEach(r => {
+    const dt = new Date(r.recordedAt);
+    if (isNaN(dt) || dt < cutoff) return;
+    if (r.session !== 'morning' && r.session !== 'evening') return;
+    const k = dt.toISOString().slice(0,10);
+    if (!byDay[k]) byDay[k] = { morning:[], evening:[] };
+    byDay[k][r.session].push({ s:r.systolic, d:r.diastolic, p:r.pulse });
+  });
+  const avg = arr => {
+    if (!arr.length) return { s:null, d:null, p:null };
+    return {
+      s: Math.round(arr.reduce((a,b)=>a+b.s,0)/arr.length),
+      d: Math.round(arr.reduce((a,b)=>a+b.d,0)/arr.length),
+      p: (() => { const ps = arr.filter(x=>x.p).map(x=>x.p); return ps.length ? Math.round(ps.reduce((a,b)=>a+b,0)/ps.length) : null; })()
+    };
+  };
+  const daily = Object.keys(byDay).sort().map(date => {
+    const m = avg(byDay[date].morning), ev = avg(byDay[date].evening);
+    const dailySBP = (m.s && ev.s) ? Math.round((m.s+ev.s)/2) : (m.s||ev.s||null);
+    const dailyDBP = (m.d && ev.d) ? Math.round((m.d+ev.d)/2) : (m.d||ev.d||null);
+    return {
+      date,
+      morningSBP:m.s, morningDBP:m.d, morningCount:byDay[date].morning.length,
+      eveningSBP:ev.s, eveningDBP:ev.d, eveningCount:byDay[date].evening.length,
+      dailySBP, dailyDBP,
+      morningSurge: (m.s && ev.s) ? (m.s - ev.s) : null,
+      targetMet: dailySBP < TARGET_SBP && dailyDBP < TARGET_DBP
+    };
+  });
+  const mean = (arr, key) => {
+    const v = arr.map(x=>x[key]).filter(x=>typeof x==='number');
+    return v.length ? Math.round(v.reduce((a,b)=>a+b,0)/v.length) : null;
+  };
+  const max = (arr, key) => {
+    const v = arr.map(x=>x[key]).filter(x=>typeof x==='number');
+    return v.length ? Math.max(...v) : null;
+  };
+  const min = (arr, key) => {
+    const v = arr.map(x=>x[key]).filter(x=>typeof x==='number');
+    return v.length ? Math.min(...v) : null;
+  };
+  return {
+    ok:true, range, generatedAt:new Date().toISOString(),
+    summary: {
+      count: all.length, totalDays: daily.length,
+      avgMorningSBP: mean(daily,'morningSBP'), avgMorningDBP: mean(daily,'morningDBP'),
+      avgEveningSBP: mean(daily,'eveningSBP'), avgEveningDBP: mean(daily,'eveningDBP'),
+      avgDailySBP:   mean(daily,'dailySBP'),   avgDailyDBP:   mean(daily,'dailyDBP'),
+      maxSBP: max(daily,'dailySBP'), minSBP: min(daily,'dailySBP'),
+      avgMorningSurge: mean(daily,'morningSurge'),
+      targetMetDays: daily.filter(d=>d.targetMet).length,
+      targetMetRate: daily.length ? Math.round(daily.filter(d=>d.targetMet).length / daily.length * 100) : 0,
+      targetSBP: TARGET_SBP, targetDBP: TARGET_DBP
+    },
+    daily
+  };
+}
+
+function fmt(v) { return v == null ? '—' : v; }
+
+function render(data, offline) {
+  const s = data.summary, d = data.daily;
+  if (!d.length) {
+    $('#content').innerHTML = `
+      ${offline ? '<div style="margin-bottom:1rem;"><span class="pill offline">離線模式</span></div>' : ''}
+      <div class="empty">此區間尚無早晨/晚間紀錄</div>`;
+    return;
+  }
+  const targetOK = s.avgDailySBP && s.avgDailyDBP && s.avgDailySBP < s.targetSBP && s.avgDailyDBP < s.targetDBP;
+  const surgeWarn = s.avgMorningSurge !== null && s.avgMorningSurge >= 20;
+
+  $('#content').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;">
+      <div>
+        <h2 style="margin:0;font-size:var(--text-lg);">期間摘要</h2>
+        <p class="muted" style="margin:0.25rem 0 0;font-size:var(--text-sm);">
+          ${d.length} 天紀錄 · 共 ${s.count} 筆 · 目標 &lt; ${s.targetSBP}/${s.targetDBP} mmHg
+        </p>
+      </div>
+      ${offline ? '<span class="pill offline">離線資料</span>' : '<span class="pill">即時同步</span>'}
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi morning">
+        <span class="label">☀️ 早晨平均</span>
+        <div class="value">${fmt(s.avgMorningSBP)} / ${fmt(s.avgMorningDBP)}</div>
+        <div class="sub">mmHg</div>
+      </div>
+      <div class="kpi evening">
+        <span class="label">🌙 晚間平均</span>
+        <div class="value">${fmt(s.avgEveningSBP)} / ${fmt(s.avgEveningDBP)}</div>
+        <div class="sub">mmHg</div>
+      </div>
+      <div class="kpi daily">
+        <span class="label">日均血壓</span>
+        <div class="value">${fmt(s.avgDailySBP)} / ${fmt(s.avgDailyDBP)}</div>
+        <div class="sub">最高 ${fmt(s.maxSBP)} · 最低 ${fmt(s.minSBP)}</div>
+      </div>
+      <div class="kpi target ${targetOK?'ok':'warn'}">
+        <span class="label">達標率</span>
+        <div class="value">${s.targetMetRate}%</div>
+        <div class="sub">${s.targetMetDays} / ${s.totalDays} 天達標</div>
+      </div>
+    </div>
+
+    ${s.avgMorningSurge !== null ? `
+      <div class="muted" style="margin-top:1rem;font-size:var(--text-sm);">
+        平均晨峰 (Morning Surge) =
+        <strong>${s.avgMorningSurge > 0 ? '+' : ''}${s.avgMorningSurge} mmHg</strong>
+        ${surgeWarn ? '<span class="warn-text"> · 偏高，建議與醫師討論</span>' : ''}
+      </div>` : ''}
+
+    <hr style="margin:1.5rem 0;border:0;border-top:1px solid color-mix(in oklab, var(--color-text) 8%, transparent);">
+
+    <h2 style="margin:0 0 1rem;font-size:var(--text-lg);">趨勢圖</h2>
+    <canvas id="chart"></canvas>
+    <div class="legend">
+      <span><span class="swatch" style="background:${COLORS.morning}"></span>早晨 SBP</span>
+      <span><span class="swatch" style="background:${COLORS.evening}"></span>晚間 SBP</span>
+      <span><span class="swatch" style="background:${COLORS.daily}"></span>日均 SBP</span>
+      <span><span class="swatch" style="background:${COLORS.target}"></span>目標 ${s.targetSBP}</span>
+    </div>
+
+    <hr style="margin:1.5rem 0;border:0;border-top:1px solid color-mix(in oklab, var(--color-text) 8%, transparent);">
+
+    <h2 style="margin:0 0 1rem;font-size:var(--text-lg);">每日明細</h2>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead><tr>
+          <th>日期</th><th>早晨</th><th>晚間</th><th>日均</th><th>晨峰</th><th>達標</th>
+        </tr></thead>
+        <tbody>
+          ${d.slice().reverse().map(row => `
+            <tr>
+              <td>${row.date.slice(5)}</td>
+              <td>${row.morningSBP?`${row.morningSBP}/${row.morningDBP}`:'—'} <span class="muted">(${row.morningCount})</span></td>
+              <td>${row.eveningSBP?`${row.eveningSBP}/${row.eveningDBP}`:'—'} <span class="muted">(${row.eveningCount})</span></td>
+              <td><strong>${row.dailySBP?`${row.dailySBP}/${row.dailyDBP}`:'—'}</strong></td>
+              <td>${row.morningSurge !== null ? (row.morningSurge>0?'+':'')+row.morningSurge : '—'}</td>
+              <td><span class="badge-dot ${row.targetMet?'ok':'no'}"></span></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-secondary" onclick="exportCSV()">匯出 CSV</button>
+      <button class="btn btn-secondary" onclick="window.print()">列印給醫師</button>
+    </div>
+  `;
+  drawChart(d, s.targetSBP);
+  window._lastDaily = d;
+}
+
+function drawChart(daily, targetSBP) {
+  const ctx = document.getElementById('chart').getContext('2d');
+  if (chart) chart.destroy();
+  Chart.defaults.font.family = "'Satoshi','Inter',-apple-system,'PingFang TC',sans-serif";
+  Chart.defaults.color = COLORS.text;
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: daily.map(d => d.date.slice(5)),
+      datasets: [
+        { label: '早晨 SBP', data: daily.map(d => d.morningSBP),
+          borderColor: COLORS.morning, backgroundColor: COLORS.morning,
+          tension: 0.25, spanGaps: true, pointRadius: 3, borderWidth: 2 },
+        { label: '晚間 SBP', data: daily.map(d => d.eveningSBP),
+          borderColor: COLORS.evening, backgroundColor: COLORS.evening,
+          tension: 0.25, spanGaps: true, pointRadius: 3, borderWidth: 2 },
+        { label: '日均 SBP', data: daily.map(d => d.dailySBP),
+          borderColor: COLORS.daily, backgroundColor: COLORS.daily,
+          tension: 0.25, spanGaps: true, pointRadius: 4, borderWidth: 2.5 },
+        { label: `目標 ${targetSBP}`, data: daily.map(() => targetSBP),
+          borderColor: COLORS.target, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { suggestedMin: 90, suggestedMax: 170,
+             title: { display: true, text: 'mmHg', color: COLORS.axis, font: { weight: 700 } },
+             grid: { color: COLORS.grid },
+             ticks: { color: COLORS.axis, font: { weight: 600, size: 11 } } },
+        x: { grid: { color: COLORS.grid },
+             ticks: { color: COLORS.axis, font: { weight: 600, size: 11 } } }
+      }
+    }
+  });
+}
+
+function exportCSV() {
+  const d = window._lastDaily || [];
+  if (!d.length) return;
+  const header = ['date','morningSBP','morningDBP','morningCount','eveningSBP','eveningDBP','eveningCount','dailySBP','dailyDBP','morningSurge','targetMet'];
+  const rows = [header.join(',')].concat(d.map(r => header.map(k => r[k] == null ? '' : r[k]).join(',')));
+  const blob = new Blob([rows.join('\n')], { type:'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `bp-${currentRange}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+$$('.range-tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.range-tabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentRange = btn.dataset.range;
+    loadStats(currentRange);
+  });
+});
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js').catch(console.warn);
+}
+
+loadStats('week');
+</script>
+</body>
+</html>
