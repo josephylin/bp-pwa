@@ -163,6 +163,40 @@
     70%  { box-shadow: 0 0 0 10px color-mix(in oklab, var(--color-primary) 0%, transparent); }
     100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-primary) 0%, transparent); }
   }
+  /* hidden 屬性要能覃蓋 display:flex */
+  [hidden] { display: none !important; }
+  /* 手動調整按鈕 ✎ */
+  .time-edit-btn {
+    flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid color-mix(in oklab, var(--color-primary) 25%, transparent);
+    background: var(--color-surface);
+    color: var(--color-primary); font-size: 16px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .15s, transform .15s;
+  }
+  .time-edit-btn:hover { background: color-mix(in oklab, var(--color-primary) 12%, transparent); }
+  .time-edit-btn:active { transform: scale(.92); }
+  /* 手動模式編輯區 */
+  .time-editor {
+    display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-2);
+    padding: 0.6rem 0.7rem; border-radius: var(--radius-md);
+    background: color-mix(in oklab, var(--color-warning, #964219) 8%, var(--color-surface-2));
+    border: 1px dashed color-mix(in oklab, var(--color-warning, #964219) 35%, transparent);
+  }
+  .time-editor input[type="datetime-local"] {
+    flex: 1; font-size: var(--text-base); padding: 0.45rem 0.55rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in oklab, var(--color-text) 18%, transparent);
+    background: var(--color-surface); color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+  }
+  .btn-mini {
+    flex-shrink: 0; padding: 0.4rem 0.7rem; border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in oklab, var(--color-primary) 30%, transparent);
+    background: var(--color-surface); color: var(--color-primary);
+    font-size: var(--text-xs); cursor: pointer; white-space: nowrap;
+  }
+  .btn-mini:hover { background: color-mix(in oklab, var(--color-primary) 12%, transparent); }
 
   .actions { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
   .btn { min-height: 44px; padding: 0.85rem 1.1rem; border-radius: var(--radius-md);
@@ -317,12 +351,19 @@
       <div class="form-grid">
         <div class="field">
           <label>量測時間</label>
-          <div id="timeDisplay" class="time-display" aria-live="polite">
+          <!-- 自動模式：顯示現在系統時間，按下儲存時才抓取 -->
+          <div id="timeDisplay" class="time-display" aria-live="polite" title="點一下可手動調整">
             <span class="time-dot"></span>
-            <div>
-              <strong id="timeNow">--:--</strong>
-              <small id="timeDate">系統時間</small>
+            <div style="flex:1">
+              <strong id="timeNow">--:--:--</strong>
+              <small id="timeDate">系統時間· 點選可手動調整</small>
             </div>
+            <button type="button" id="editTimeBtn" class="time-edit-btn" aria-label="手動調整時間">✎</button>
+          </div>
+          <!-- 手動模式：點「✎」後顯現，可手動調整 -->
+          <div id="timeEditor" class="time-editor" hidden>
+            <input id="timeManual" type="datetime-local" step="60" />
+            <button type="button" id="timeBackBtn" class="btn-mini">← 回自動</button>
           </div>
         </div>
         <div class="field">
@@ -374,7 +415,7 @@
     </form>
 
     <p class="footer-note">提醒：本工具僅供居家紀錄參考，不取代正式醫療診斷與病歷系統。</p>
-    <p class="footer-note" style="opacity:.5">build v2.4 · 欄位順序 SYS→DIA→心跳</p>
+    <p class="footer-note" style="opacity:.5">build v2.5 · 時間可點✎手動調整</p>
   </section>
 
   <!-- ====== 歷史紀錄 ====== -->
@@ -397,7 +438,7 @@
 /* =========================================================
  *  設定區（與 Code.gs 對應）
  * ========================================================= */
-const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwp5HNnP_kXJ4yIfqQ-ct4aU2LYG2D9QwAxO5ZpVjJnupw7pI9GB22qAJQVsummTKbLfQ/exec'';
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwp5HNnP_kXJ4yIfqQ-ct4aU2LYG2D9QwAxO5ZpVjJnupw7pI9GB22qAJQVsummTKbLfQ/exec';
 const SECRET   = 'CHANGE_LIN_to_a_random_string';
 
 const MORNING_HOURS = [5, 11];     // 05:00 - 10:59
@@ -663,8 +704,15 @@ $('bpForm').addEventListener('submit', (ev) => {
     return;
   }
 
-  // 重點：量測時間 = 「按下儲存」的系統當下時間
-  const now = new Date();
+  // 量測時間：預設 = 「按下儲存」的系統當下時間
+  // 若使用者手動調整過（點了✎並編輯），則以手動值為準
+  let now;
+  if (isManualTime && $('timeManual').value) {
+    now = new Date($('timeManual').value);   // datetime-local 會以本機時區解讀
+    if (isNaN(now.getTime())) now = new Date();
+  } else {
+    now = new Date();
+  }
   const recordedAt = now.toISOString();
   const session = currentSession || detectSession(now);
   const sameToday = getTodaySessionRecords(session);
@@ -685,6 +733,8 @@ $('bpForm').addEventListener('submit', (ev) => {
   toast(`已儲存（${session==='morning'?'早晨':session==='evening'?'晚間':'其他'} 第 ${pairIndex} 次）`);
 
   resetForm();
+  // 提交後自動回「自動時間」模式（下一筆預設仍是跟着系統走）
+  if (isManualTime) backToAutoTime();
   if (navigator.onLine) sync();
 });
 
@@ -733,6 +783,31 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && na
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js').catch(console.warn));
 }
+
+/* ---------- 手動/自動時間切換 ---------- */
+let isManualTime = false;
+function _toDatetimeLocalValue(d) {
+  // datetime-local 需要 yyyy-MM-ddTHH:mm 格式（本機時區）
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}` +
+         `T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function enterManualTime() {
+  isManualTime = true;
+  $('timeManual').value = _toDatetimeLocalValue(new Date());
+  $('timeDisplay').hidden = true;
+  $('timeEditor').hidden  = false;
+  stopClock();
+  $('timeManual').focus();
+}
+function backToAutoTime() {
+  isManualTime = false;
+  $('timeEditor').hidden  = true;
+  $('timeDisplay').hidden = false;
+  startClock();
+}
+$('editTimeBtn').addEventListener('click', enterManualTime);
+$('timeBackBtn').addEventListener('click', backToAutoTime);
 
 /* ---------- Boot ---------- */
 startClock();              // 開始每秒更新時間顯示
