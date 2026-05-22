@@ -445,7 +445,7 @@
     </form>
 
     <p class="footer-note">提醒：本工具僅供居家紀錄參考，不取代正式醫療診斷與病歷系統。</p>
-    <p class="footer-note" style="opacity:.5">build v2.8 · 自動抓新版 + 更新提示</p>
+    <p class="footer-note" style="opacity:.5">build v2.9 · 主題循環 auto→淺→深</p>
   </section>
 
   <!-- ====== 歷史紀錄 ====== -->
@@ -522,35 +522,48 @@ function applyTheme() {
 }
 
 /* 設定右上角按鈕圖示與提示文字
-   - auto 模式：為了讓使用者知道這是「自動」，加上小点徽標
-   - 鎖定模式：只顯示〇/月圖示 */
+   - auto 模式：加上綠色徽標小點，使用者知道這是「自動」
+   - 鎖定模式：沒有小點 */
 function setThemeIcon(effective) {
   const sun  = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg>';
   const moon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3A7 7 0 0 0 21 12.79z"></path></svg>';
   themeBtn.innerHTML = (effective === 'dark' ? sun : moon);
-  // auto 模式下加上小點提示
   themeBtn.classList.toggle('is-auto', themeMode === 'auto');
+
+  // 下一個狀態提示：auto → light → dark → auto
+  const nextHint = themeMode === 'auto' ? '鎖定淺色'
+                 : themeMode === 'light' ? '鎖定深色'
+                 : '改為自動跟時段';
   themeBtn.title = themeMode === 'auto'
-    ? `自動（現為${effective === 'dark' ? '深' : '淺'}色）· 點一下鎖定${effective === 'dark' ? '淺' : '深'}色`
-    : `已鎖定${effective === 'dark' ? '深' : '淺'}色· 點一下該為${effective === 'dark' ? '淺' : '深'}色（長按重置為自動）`;
+    ? `自動模式（現為${effective === 'dark' ? '深' : '淺'}色）· 點一下${nextHint}`
+    : `手動${themeMode === 'dark' ? '深' : '淺'}色 · 點一下${nextHint}`;
   themeBtn.setAttribute('aria-label', themeBtn.title);
 }
 
-/* 點擊：在亮 ↔ 暗之間切換並鎖定；長按重置為 auto */
-let _themeBtnPressTimer = null;
+/* 點擊循環：auto → light → dark → auto
+   這樣不用記「長按重置」，多點幾下一定能回到 auto */
 themeBtn.addEventListener('click', () => {
-  const current = root.getAttribute('data-theme');
-  themeMode = current === 'dark' ? 'light' : 'dark';
+  if (themeMode === 'auto')       themeMode = 'light';
+  else if (themeMode === 'light') themeMode = 'dark';
+  else                            themeMode = 'auto';
   localStorage.setItem(LS_THEME, themeMode);
   applyTheme();
+  // 順手提示現在是哪個模式，不用使用者猜
+  const label = themeMode === 'auto' ? '自動（跟時段）'
+              : themeMode === 'light' ? '手動淺色'
+              : '手動深色';
+  toast(`主題：${label}`);
 });
-// 長按 800ms 重置為自動
+// 長按 800ms 也可以快速重置為 auto
+let _themeBtnPressTimer = null;
 themeBtn.addEventListener('pointerdown', () => {
   _themeBtnPressTimer = setTimeout(() => {
-    themeMode = 'auto';
-    localStorage.setItem(LS_THEME, 'auto');
-    applyTheme();
-    toast('主題已重置為「自動按時段」');
+    if (themeMode !== 'auto') {
+      themeMode = 'auto';
+      localStorage.setItem(LS_THEME, 'auto');
+      applyTheme();
+      toast('主題已重置為「自動跟時段」');
+    }
   }, 800);
 });
 ['pointerup', 'pointerleave', 'pointercancel'].forEach(e =>
@@ -562,7 +575,7 @@ applyTheme();
 
 // 每分鐘重新評估一次（auto 模式下才會真的切）
 setInterval(() => { if (themeMode === 'auto') applyTheme(); }, 60 * 1000);
-// 頁面從背景回來也梹查一次
+// 頁面從背景回來也再檢查一次
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && themeMode === 'auto') applyTheme();
 });
