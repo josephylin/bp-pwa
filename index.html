@@ -78,6 +78,14 @@
     border: 1px solid color-mix(in oklab, var(--color-text) 10%, transparent);
     display: grid; place-items: center; color: var(--color-text); }
   .icon-btn:hover { background: var(--color-surface-offset); }
+  /* auto 模式下的小徽標：右上角一點小點 */
+  .icon-btn { position: relative; }
+  .icon-btn.is-auto::after {
+    content: ''; position: absolute; top: 6px; right: 6px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--color-success, #437a22);
+    box-shadow: 0 0 0 2px var(--color-surface);
+  }
 
   /* ===== Panel ===== */
   .panel { background: var(--color-surface);
@@ -415,7 +423,7 @@
     </form>
 
     <p class="footer-note">提醒：本工具僅供居家紀錄參考，不取代正式醫療診斷與病歷系統。</p>
-    <p class="footer-note" style="opacity:.5">build v2.5 · 時間可點✎手動調整</p>
+    <p class="footer-note" style="opacity:.5">build v2.6 · 主題自動按時段切換</p>
   </section>
 
   <!-- ====== 歷史紀錄 ====== -->
@@ -463,25 +471,78 @@ function uuid() {
 const loadArr = (k) => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch(_) { return []; } };
 const saveArr = (k, arr) => localStorage.setItem(k, JSON.stringify(arr));
 
-/* ---------- Theme ---------- */
+/* ---------- Theme（自動按時段切換，手動點擊則鎖定） ---------- */
 const themeBtn = document.querySelector('[data-theme-toggle]');
 const root = document.documentElement;
-let theme = localStorage.getItem(LS_THEME)
-  || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-root.setAttribute('data-theme', theme);
 
-function setThemeIcon() {
-  themeBtn.innerHTML = theme === 'dark'
-    ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg>'
-    : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3A7 7 0 0 0 21 12.79z"></path></svg>';
-  themeBtn.setAttribute('aria-label', theme === 'dark' ? '切換淺色模式' : '切換深色模式');
+// LS_THEME 可能的值：'auto' | 'light' | 'dark'
+//   'auto' = 跟時段走（05:00-17:59 亮；18:00-04:59 暗）← 預設
+//   'light' / 'dark' = 手動鎖定
+//
+// 舊版本只存 light/dark；這裡 backward compatible
+let themeMode = localStorage.getItem(LS_THEME);
+if (themeMode !== 'auto' && themeMode !== 'light' && themeMode !== 'dark') {
+  themeMode = 'auto';   // 首次如使用預設自動
 }
-setThemeIcon();
+
+/* 根據現在時間推算應該是 light 還是 dark */
+function _autoTheme() {
+  const h = new Date().getHours();
+  // 05:00 → 淺；18:00 → 深；凌晨 0-4 點也是深
+  return (h >= 5 && h < 18) ? 'light' : 'dark';
+}
+
+/* 套用到 DOM：看現在模式取得最終亮/暗 */
+function applyTheme() {
+  const effective = themeMode === 'auto' ? _autoTheme() : themeMode;
+  root.setAttribute('data-theme', effective);
+  setThemeIcon(effective);
+}
+
+/* 設定右上角按鈕圖示與提示文字
+   - auto 模式：為了讓使用者知道這是「自動」，加上小点徽標
+   - 鎖定模式：只顯示〇/月圖示 */
+function setThemeIcon(effective) {
+  const sun  = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg>';
+  const moon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3A7 7 0 0 0 21 12.79z"></path></svg>';
+  themeBtn.innerHTML = (effective === 'dark' ? sun : moon);
+  // auto 模式下加上小點提示
+  themeBtn.classList.toggle('is-auto', themeMode === 'auto');
+  themeBtn.title = themeMode === 'auto'
+    ? `自動（現為${effective === 'dark' ? '深' : '淺'}色）· 點一下鎖定${effective === 'dark' ? '淺' : '深'}色`
+    : `已鎖定${effective === 'dark' ? '深' : '淺'}色· 點一下該為${effective === 'dark' ? '淺' : '深'}色（長按重置為自動）`;
+  themeBtn.setAttribute('aria-label', themeBtn.title);
+}
+
+/* 點擊：在亮 ↔ 暗之間切換並鎖定；長按重置為 auto */
+let _themeBtnPressTimer = null;
 themeBtn.addEventListener('click', () => {
-  theme = theme === 'dark' ? 'light' : 'dark';
-  root.setAttribute('data-theme', theme);
-  localStorage.setItem(LS_THEME, theme);
-  setThemeIcon();
+  const current = root.getAttribute('data-theme');
+  themeMode = current === 'dark' ? 'light' : 'dark';
+  localStorage.setItem(LS_THEME, themeMode);
+  applyTheme();
+});
+// 長按 800ms 重置為自動
+themeBtn.addEventListener('pointerdown', () => {
+  _themeBtnPressTimer = setTimeout(() => {
+    themeMode = 'auto';
+    localStorage.setItem(LS_THEME, 'auto');
+    applyTheme();
+    toast('主題已重置為「自動按時段」');
+  }, 800);
+});
+['pointerup', 'pointerleave', 'pointercancel'].forEach(e =>
+  themeBtn.addEventListener(e, () => clearTimeout(_themeBtnPressTimer))
+);
+
+// 首次套用
+applyTheme();
+
+// 每分鐘重新評估一次（auto 模式下才會真的切）
+setInterval(() => { if (themeMode === 'auto') applyTheme(); }, 60 * 1000);
+// 頁面從背景回來也梹查一次
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && themeMode === 'auto') applyTheme();
 });
 
 /* ---------- 時段判定 ---------- */
