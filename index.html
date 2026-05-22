@@ -173,6 +173,28 @@
   }
   /* hidden 屬性要能覃蓋 display:flex */
   [hidden] { display: none !important; }
+
+  /* 「發現新版本」浮標提示條 */
+  #updateBanner {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.7rem 0.9rem; border-radius: 999px;
+    background: var(--color-primary); color: #fff;
+    box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    font-size: var(--text-sm); font-weight: 500; z-index: 9999;
+    animation: slideUp .4s cubic-bezier(.2,.8,.2,1);
+    max-width: calc(100% - 32px);
+  }
+  #updateBanner button {
+    background: rgba(255,255,255,.18); color: #fff; border: 0;
+    padding: 0.4rem 0.8rem; border-radius: 999px;
+    font-size: var(--text-xs); cursor: pointer; font-weight: 600;
+    white-space: nowrap;
+  }
+  #updateBanner span { white-space: nowrap; }
+  #updateBanner button:hover { background: rgba(255,255,255,.3); }
+  #updateBanner #dismissUpdateBtn { padding: 0.2rem 0.5rem; font-size: 1.1rem; line-height: 1; }
+  @keyframes slideUp { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
   /* 手動調整按鈕 ✎ */
   .time-edit-btn {
     flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
@@ -423,7 +445,7 @@
     </form>
 
     <p class="footer-note">提醒：本工具僅供居家紀錄參考，不取代正式醫療診斷與病歷系統。</p>
-    <p class="footer-note" style="opacity:.5">build v2.6 · 主題自動按時段切換</p>
+    <p class="footer-note" style="opacity:.5">build v2.8 · 自動抓新版 + 更新提示</p>
   </section>
 
   <!-- ====== 歷史紀錄 ====== -->
@@ -840,9 +862,61 @@ window.addEventListener('online',  () => { refreshNetwork(); sync(); });
 window.addEventListener('offline', refreshNetwork);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && navigator.onLine) sync(); });
 
-/* ---------- Service Worker ---------- */
+/* ---------- Service Worker：註冊 + 新版偵測 ---------- */
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js').catch(console.warn));
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('service-worker.js');
+
+      // 1) 連線時主動勥問伺服器是否有新版 SW
+      reg.update().catch(() => {});
+      // 每 30 分鐘再試一次（長開著也能抓到新版）
+      setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+
+      // 2) 偵測到新版 SW 安裝完成（installed 狀態）則彈浮標
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+            showUpdateBanner(reg);   // 有舊 SW 控制 = 這是「更新」而非首裝
+          }
+        });
+      });
+    } catch (err) { console.warn('SW register failed', err); }
+  });
+
+  // 3) SW 控制權一交接就重載 → 使用者按「套用新版」後才會觸發
+  let _reloadedForUpdate = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_reloadedForUpdate) return;
+    _reloadedForUpdate = true;
+    location.reload();
+  });
+
+  // 4) SW 主動 postMessage 也關接一下（乾涨接手包含 activate 后標記）
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'SW_UPDATED') {
+      console.log('[SW] updated to', e.data.version);
+    }
+  });
+}
+
+/* 「發現新版本」提示條 */
+function showUpdateBanner(reg) {
+  if (document.getElementById('updateBanner')) return;
+  const bar = document.createElement('div');
+  bar.id = 'updateBanner';
+  bar.innerHTML = `
+    <span>✨ 有新版本可用</span>
+    <button type="button" id="applyUpdateBtn">套用並重新載入</button>
+    <button type="button" id="dismissUpdateBtn" aria-label="稍後">×</button>
+  `;
+  document.body.appendChild(bar);
+  document.getElementById('applyUpdateBtn').addEventListener('click', () => {
+    if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+  });
+  document.getElementById('dismissUpdateBtn').addEventListener('click', () => bar.remove());
 }
 
 /* ---------- 手動/自動時間切換 ---------- */

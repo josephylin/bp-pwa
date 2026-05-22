@@ -439,7 +439,14 @@ $$('.range-tabs button').forEach(btn => {
 });
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('service-worker.js').catch(console.warn);
+  navigator.serviceWorker.register('service-worker.js').then(reg => {
+    reg.update().catch(() => {});
+  }).catch(console.warn);
+  // 控制權一交接就重載（使用者在首頁按「套用新版」時才有效）
+  let _r = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_r) return; _r = true; location.reload();
+  });
 }
 
 loadStats('week');
