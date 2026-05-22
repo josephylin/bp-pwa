@@ -445,7 +445,7 @@
     </form>
 
     <p class="footer-note">提醒：本工具僅供居家紀錄參考，不取代正式醫療診斷與病歷系統。</p>
-    <p class="footer-note" style="opacity:.5">build v2.9 · 主題循環 auto→淺→深</p>
+    <p class="footer-note" style="opacity:.5">build v2.10 · 開啟自動拉 Sheet 歷史</p>
   </section>
 
   <!-- ====== 歷史紀錄 ====== -->
@@ -455,7 +455,10 @@
         <h2>歷史紀錄</h2>
         <p>最新資料排在最上方 · 顯示最近 10 筆</p>
       </div>
-      <span class="pill muted" id="storagePill">本機 0 KB</span>
+      <div style="display:flex;gap:.4rem;align-items:center;">
+        <button type="button" id="pullBtn" class="btn-mini" title="從 Google Sheet 拉回歷史">↻ 拉歷史</button>
+        <span class="pill muted" id="storagePill">本機 0 KB</span>
+      </div>
     </div>
     <div id="history" class="history"></div>
   </section>
@@ -838,6 +841,10 @@ $('syncBtn').addEventListener('click', () => {
   if (!navigator.onLine) { toast('目前離線，恢復連線後會自動同步'); return; }
   sync(true);
 });
+$('pullBtn').addEventListener('click', () => {
+  if (!navigator.onLine) { toast('目前離線，無法拉歷史'); return; }
+  pullFromSheet(true);
+});
 
 /* ---------- Sync ---------- */
 let _syncing = false;
@@ -871,9 +878,66 @@ async function sync(verbose=false) {
   } finally { _syncing = false; }
 }
 
-window.addEventListener('online',  () => { refreshNetwork(); sync(); });
+/* ---------- v2.10: 從 Sheet 拉回歷史 ----------
+ * 目的：換裝置、刪過網站資料、重訿 PWA 後，首頁這邊也能看到 Sheet 上的舊資料。
+ * 策略：拉最新 N 筆→以 clientId 為主鍵 merge 進 LS_SYNCED→去重保留 200 筆。 */
+const PULL_LIMIT = 50;
+async function pullFromSheet(verbose=false) {
+  if (!ENDPOINT.includes('/exec')) return;
+  if (!navigator.onLine) return;
+  try {
+    const res = await fetch(`${ENDPOINT}?action=list&limit=${PULL_LIMIT}`, { method:'GET' });
+    const data = await res.json();
+    if (!data.ok || !Array.isArray(data.records)) throw new Error(data.error || 'BAD_RESPONSE');
+
+    // 正規化：確保 recordedAt 是 'yyyy-MM-dd HH:mm:ss' 字串
+    const remote = data.records.map(r => {
+      let t = r.recordedAt;
+      if (t instanceof Date || (typeof t === 'string' && t.includes('T'))) {
+        const d = new Date(t);
+        if (!isNaN(d)) {
+          const pad = n => String(n).padStart(2,'0');
+          t = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ` +
+              `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        }
+      }
+      return {
+        clientId:   String(r.clientId || ''),
+        recordedAt: String(t || ''),
+        session:    r.session || 'other',
+        pairIndex:  Number(r.pairIndex) || 1,
+        systolic:   Number(r.systolic) || null,
+        diastolic:  Number(r.diastolic) || null,
+        pulse:      r.pulse ? Number(r.pulse) : null,
+        arm:        r.arm || '',
+        position:   r.position || '',
+        note:       r.note || ''
+      };
+    }).filter(r => r.clientId && r.systolic && r.diastolic);
+
+    // 與本機 synced merge（以 clientId 為主鍵，遠端覆蓋本機旧資）
+    const local = loadArr(LS_SYNCED);
+    const map = new Map();
+    for (const r of local)  map.set(r.clientId, r);
+    for (const r of remote) map.set(r.clientId, r);
+    const merged = Array.from(map.values())
+      .sort((a,b) => (b.recordedAt||'').localeCompare(a.recordedAt||''))
+      .slice(0, 200);
+    saveArr(LS_SYNCED, merged);
+
+    renderHistory(); updateUI();
+    if (verbose) toast(`已拉回 ${remote.length} 筆 Sheet 資料`);
+  } catch (err) {
+    console.warn('pullFromSheet failed:', err);
+    if (verbose) toast('拉歷史失敗：' + err.message);
+  }
+}
+
+window.addEventListener('online',  () => { refreshNetwork(); sync(); pullFromSheet(); });
 window.addEventListener('offline', refreshNetwork);
-document.addEventListener('visibilitychange', () => { if (!document.hidden && navigator.onLine) sync(); });
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && navigator.onLine) { sync(); pullFromSheet(); }
+});
 
 /* ---------- Service Worker：註冊 + 新版偵測 ---------- */
 if ('serviceWorker' in navigator) {
@@ -962,7 +1026,7 @@ startClock();              // 開始每秒更新時間顯示
 const initSession = detectSession(new Date());
 setTab(initSession === 'evening' ? 'evening' : 'morning');
 refreshNetwork(); renderHistory();
-if (navigator.onLine) sync();
+if (navigator.onLine) { sync(); pullFromSheet(); }
 
 // 頁面隱藏時暑停時鎖節能，回到前景時重新啟動
 document.addEventListener('visibilitychange', () => {
