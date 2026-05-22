@@ -138,6 +138,32 @@
   .field small { color: var(--color-text-faint); font-size: var(--text-xs); }
   .full { grid-column: 1 / -1; }
 
+  /* 量測時間顯示卡 */
+  .time-display {
+    display: flex; align-items: center; gap: var(--space-3);
+    padding: 0.85rem 0.95rem; border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    border: 1px solid color-mix(in oklab, var(--color-text) 10%, transparent);
+    min-height: 52px;
+  }
+  .time-display strong {
+    display: block; font-size: var(--text-lg); font-weight: 700;
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--color-primary); line-height: 1.2;
+  }
+  .time-display small { display: block; color: var(--color-text-muted); font-size: var(--text-xs); margin-top: 2px; }
+  .time-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--color-primary); flex-shrink: 0;
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-primary) 60%, transparent);
+    animation: pulse 2s ease-out infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-primary) 50%, transparent); }
+    70%  { box-shadow: 0 0 0 10px color-mix(in oklab, var(--color-primary) 0%, transparent); }
+    100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-primary) 0%, transparent); }
+  }
+
   .actions { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
   .btn { min-height: 44px; padding: 0.85rem 1.1rem; border-radius: var(--radius-md);
     font-size: var(--text-sm); font-weight: 700;
@@ -290,22 +316,28 @@
     <form id="bpForm">
       <div class="form-grid">
         <div class="field">
-          <label for="recordedAt">量測時間</label>
-          <input id="recordedAt" name="recordedAt" type="datetime-local" required />
-        </div>
-        <div class="field">
-          <label for="pulse">心跳</label>
-          <input id="pulse" name="pulse" type="number" inputmode="numeric" min="30" max="220" placeholder="例如 72" />
+          <label>量測時間</label>
+          <div id="timeDisplay" class="time-display" aria-live="polite">
+            <span class="time-dot"></span>
+            <div>
+              <strong id="timeNow">--:--</strong>
+              <small id="timeDate">系統時間</small>
+            </div>
+          </div>
         </div>
         <div class="field">
           <label for="systolic">收縮壓 SYS</label>
-          <input id="systolic" name="systolic" type="number" inputmode="numeric" min="60" max="260" placeholder="例如 120" required />
+          <input id="systolic" name="systolic" type="number" inputmode="numeric" min="60" max="260" placeholder="例如 120" tabindex="1" required />
           <small>上壓</small>
         </div>
         <div class="field">
           <label for="diastolic">舒張壓 DIA</label>
-          <input id="diastolic" name="diastolic" type="number" inputmode="numeric" min="40" max="180" placeholder="例如 80" required />
+          <input id="diastolic" name="diastolic" type="number" inputmode="numeric" min="40" max="180" placeholder="例如 80" tabindex="2" required />
           <small>下壓</small>
+        </div>
+        <div class="field">
+          <label for="pulse">心跳</label>
+          <input id="pulse" name="pulse" type="number" inputmode="numeric" min="30" max="220" placeholder="例如 72" tabindex="3" />
         </div>
         <div class="field">
           <label for="arm">手臂</label>
@@ -342,6 +374,7 @@
     </form>
 
     <p class="footer-note">提醒：本工具僅供居家紀錄參考，不取代正式醫療診斷與病歷系統。</p>
+    <p class="footer-note" style="opacity:.5">build v2.4 · 欄位順序 SYS→DIA→心跳</p>
   </section>
 
   <!-- ====== 歷史紀錄 ====== -->
@@ -364,7 +397,7 @@
 /* =========================================================
  *  設定區（與 Code.gs 對應）
  * ========================================================= */
-const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwp5HNnP_kXJ4yIfqQ-ct4aU2LYG2D9QwAxO5ZpVjJnupw7pI9GB22qAJQVsummTKbLfQ/exec';
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwp5HNnP_kXJ4yIfqQ-ct4aU2LYG2D9QwAxO5ZpVjJnupw7pI9GB22qAJQVsummTKbLfQ/exec'';
 const SECRET   = 'CHANGE_LIN_to_a_random_string';
 
 const MORNING_HOURS = [5, 11];     // 05:00 - 10:59
@@ -562,11 +595,43 @@ function renderHistory() {
   } catch(_) {}
 }
 
-function fillNow() {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  $('recordedAt').value = d.toISOString().slice(0,16);
+/* 時間顯示：每秒更新，使用者無需選擇
+ * v2.3 採用這兩種保險以防時鐘停止：
+ *   (a) setInterval 每秒 tick；頁面切回前台則重呬
+ *   (b) requestAnimationFrame 輔助檢查，若 timer 死就重啟（保险絲）
+ */
+let _tickTimer = null;
+let _lastTickAt = 0;
+function tickClock() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  const elNow  = document.getElementById('timeNow');
+  const elDate = document.getElementById('timeDate');
+  if (elNow)  elNow.textContent = `${hh}:${mm}:${ss}`;
+  const weekdays = ['週日','週一','週二','週三','週四','週五','週六'];
+  if (elDate) elDate.textContent =
+    `${now.getMonth()+1}月${now.getDate()}日（${weekdays[now.getDay()]}）· 現在`;
+  _lastTickAt = Date.now();
 }
+function startClock() {
+  tickClock();
+  if (_tickTimer) clearInterval(_tickTimer);
+  _tickTimer = setInterval(tickClock, 1000);
+}
+function stopClock() {
+  if (_tickTimer) { clearInterval(_tickTimer); _tickTimer = null; }
+}
+/* 守護者：若時鐘超過 3 秒沒跳動，強制重啟。
+   這可避免 iOS Safari 背景定時器被凍結後沒醒來。 */
+function _clockWatchdog() {
+  if (!document.hidden && Date.now() - _lastTickAt > 3000) {
+    startClock();
+  }
+  setTimeout(_clockWatchdog, 2000);
+}
+_clockWatchdog();
 
 /* 送出後清空表單，但保留手臂/姿勢（量測習慣通常不變），並把焦點移回收縮壓 */
 function resetForm() {
@@ -580,12 +645,9 @@ function resetForm() {
   $('arm').value = armKeep;
   $('position').value = posKeep;
 
-  // 重新填入「現在」時間，並把焦點移到下一筆最常輸入的欄位
-  fillNow();
-  // 用 requestAnimationFrame 確保 reset 完成後再 focus
+  // 把焦點移到下一筆最常輸入的欄位，時間会自動指向「現在」
   requestAnimationFrame(() => {
     $('systolic').focus({ preventScroll: false });
-    // iOS Safari 在某些情況下需要 select 觸發鍵盤
     try { $('systolic').select(); } catch(_) {}
   });
 }
@@ -601,10 +663,10 @@ $('bpForm').addEventListener('submit', (ev) => {
     return;
   }
 
-  const recordedAt = $('recordedAt').value
-    ? new Date($('recordedAt').value).toISOString()
-    : new Date().toISOString();
-  const session = currentSession || detectSession(new Date(recordedAt));
+  // 重點：量測時間 = 「按下儲存」的系統當下時間
+  const now = new Date();
+  const recordedAt = now.toISOString();
+  const session = currentSession || detectSession(now);
   const sameToday = getTodaySessionRecords(session);
   const pairIndex = sameToday.length + 1;
 
@@ -673,11 +735,17 @@ if ('serviceWorker' in navigator) {
 }
 
 /* ---------- Boot ---------- */
-fillNow();
+startClock();              // 開始每秒更新時間顯示
 const initSession = detectSession(new Date());
 setTab(initSession === 'evening' ? 'evening' : 'morning');
 refreshNetwork(); renderHistory();
 if (navigator.onLine) sync();
+
+// 頁面隱藏時暑停時鎖節能，回到前景時重新啟動
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopClock();
+  else startClock();
+});
 </script>
 </body>
 </html>

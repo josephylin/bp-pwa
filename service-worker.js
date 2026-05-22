@@ -1,7 +1,7 @@
 /* 血壓紀錄 PWA v2 — Service Worker
  * 改版號以強制更新；新增 stats.html 與 Chart.js
  */
-const CACHE = 'bp-pwa-v2.1';
+const CACHE = 'bp-pwa-v2.4';   // 🔄 欄位順序改為 SYS → DIA → 心跳
 const ASSETS = [
   './',
   './index.html',
