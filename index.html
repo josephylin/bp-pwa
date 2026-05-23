@@ -445,7 +445,7 @@
     </form>
 
     <p class="footer-note">提醒：本工具僅供居家紀錄參考，不取代正式醫療診斷與病歷系統。</p>
-    <p class="footer-note" style="opacity:.5">build v2.10 · 開啟自動拉 Sheet 歷史</p>
+    <p class="footer-note" style="opacity:.5">build v2.11 · 今日過濾修正（本地時区）</p>
   </section>
 
   <!-- ====== 歷史紀錄 ====== -->
@@ -591,9 +591,15 @@ function detectSession(date) {
   return 'other';
 }
 function dateKey(date) {
-  // 凌晨 00:00–01:59 視為前一晚 evening
-  const d = new Date(date.getTime() - 2 * 3600 * 1000);
-  return d.toISOString().slice(0, 10);
+  // 使用本地時間（不轉 UTC）
+  // 犹貊規則：凌晨 00:00–01:59 視為「前一天的 evening」
+  // → 只在這兩個小時才倍退 1 天，其他時段一律用當天本地日期
+  const d = new Date(date);
+  if (d.getHours() < 2) d.setDate(d.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /* ---------- 血壓分級（從參考檔抓） ---------- */
@@ -629,8 +635,18 @@ function getAllRecords() { return [...loadArr(LS_QUEUE), ...loadArr(LS_SYNCED)];
 function getTodaySessionRecords(session) {
   const today = dateKey(new Date());
   return getAllRecords()
-    .filter(r => r.session === session && dateKey(new Date(r.recordedAt)) === today)
-    .sort((a,b) => (a.recordedAt||'').localeCompare(b.recordedAt||''));
+    .filter(r => {
+      if (r.session !== session) return false;
+      // recordedAt 是 'yyyy-MM-dd HH:mm:ss' 本地時間字串，必須用本地解析
+      // 如果是 Date / ISO字串亦包含
+      const t = String(r.recordedAt || '');
+      const m = t.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+      const d = m
+        ? new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6])
+        : new Date(t);
+      return dateKey(d) === today;
+    })
+    .sort((a,b) => String(a.recordedAt||'').localeCompare(String(b.recordedAt||'')));
 }
 function avgOf(arr, key) {
   const v = arr.map(r => r[key]).filter(x => typeof x === 'number');
@@ -812,7 +828,10 @@ $('bpForm').addEventListener('submit', (ev) => {
   } else {
     now = new Date();
   }
-  const recordedAt = now.toISOString();
+  // 本地時間 'yyyy-MM-dd HH:mm:ss'（與 Sheet 上的格式一致，避免 UTC 偏移）
+  const pad = n => String(n).padStart(2,'0');
+  const recordedAt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} `
+                   + `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   const session = currentSession || detectSession(now);
   const sameToday = getTodaySessionRecords(session);
   const pairIndex = sameToday.length + 1;
