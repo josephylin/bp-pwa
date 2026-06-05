@@ -74,7 +74,19 @@
   .pill.offline { background: color-mix(in oklab, var(--color-warning) 16%, transparent); color: var(--color-warning); }
 
   /* Range tabs */
-  .range-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); margin-bottom: var(--space-4); }
+  .range-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); margin-bottom: var(--space-4); }
+  .custom-range { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;
+                  padding: var(--space-3); margin-bottom: var(--space-4);
+                  background: var(--color-surface-offset); border-radius: var(--radius-md); }
+  .custom-range label { display: flex; align-items: center; gap: 0.4rem; font-size: var(--text-sm); color: var(--color-text-muted); }
+  .custom-range input[type=date] { padding: 0.4rem 0.6rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+                                   background: var(--color-surface); color: var(--color-text); font-size: var(--text-sm); }
+  .btn-mini { padding: 0.45rem 0.8rem; font-size: var(--text-sm); font-weight: 600;
+              background: var(--color-primary); color: var(--color-text-inverse);
+              border: 1px solid var(--color-primary); border-radius: var(--radius-sm); cursor: pointer; }
+  .btn-mini.btn-ghost { background: transparent; color: var(--color-text); border-color: var(--color-border); font-weight: 500; }
+  .btn-mini.btn-ghost:hover { background: var(--color-surface); }
+  @media print { .custom-range { display: none !important; } }
   .range-tabs button { min-height: 44px; border-radius: var(--radius-md);
     background: var(--color-surface);
     border: 1px solid color-mix(in oklab, var(--color-text) 10%, transparent);
@@ -169,6 +181,15 @@
       <button data-range="week"  class="active">本週 7 天</button>
       <button data-range="month">本月 30 天</button>
       <button data-range="all">全部</button>
+      <button data-range="custom">自訂…</button>
+    </div>
+    <div id="customRange" class="custom-range" hidden>
+      <label>從 <input type="date" id="dateFrom"></label>
+      <label>到 <input type="date" id="dateTo"></label>
+      <button id="applyRange" class="btn-mini">套用</button>
+      <button id="quickThisMonth" class="btn-mini btn-ghost" title="本月 1 號至今">本月迄今</button>
+      <button id="quickLastMonth" class="btn-mini btn-ghost" title="上個月全月">上個月</button>
+      <button id="quickYTD" class="btn-mini btn-ghost" title="今年 1/1 至今">今年迄今</button>
     </div>
     <div id="content">
       <div class="loading">載入中…</div>
@@ -200,36 +221,63 @@ const COLORS = {
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 let currentRange = 'week';
+let currentFrom = null;  // 'YYYY-MM-DD'
+let currentTo = null;
 let chart = null;
 
-async function loadStats(range) {
+async function loadStats(range, from, to) {
   $('#content').innerHTML = '<div class="loading">載入中…</div>';
+  let url = `${ENDPOINT}?action=stats`;
+  if (from && to) url += `&from=${from}&to=${to}`;
+  else            url += `&range=${range}`;
   try {
-    const res = await fetch(`${ENDPOINT}?action=stats&range=${range}`);
+    const res = await fetch(url);
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'SERVER_ERROR');
     render(data, false);
   } catch (err) {
     console.warn('API 失敗，改用本機資料：', err);
-    render(computeLocalStats(range), true);
+    render(computeLocalStats(range, from, to), true);
   }
 }
 
 /* 離線本機計算 */
-function computeLocalStats(range) {
-  const days = range === 'month' ? 30 : (range === 'all' ? 9999 : 7);
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days + 1); cutoff.setHours(0,0,0,0);
+function parseLocalTime(s) {
+  // 容錯解析：'YYYY-MM-DD HH:mm:ss' 本地時間 / ISO
+  if (!s) return null;
+  if (s instanceof Date) return isNaN(s) ? null : s;
+  const m = String(s).match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2}):(\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]);
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+function localDateKey(d) {
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+function computeLocalStats(range, fromStr, toStr) {
   const TARGET_SBP = 130, TARGET_DBP = 80;
+  let cutoffFrom, cutoffTo;
+  if (fromStr && toStr) {
+    const fm = fromStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    const tm = toStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    cutoffFrom = new Date(+fm[1], +fm[2]-1, +fm[3], 0, 0, 0);
+    cutoffTo   = new Date(+tm[1], +tm[2]-1, +tm[3], 23, 59, 59);
+  } else {
+    const days = range === 'month' ? 30 : (range === 'all' ? 9999 : 7);
+    cutoffFrom = new Date(); cutoffFrom.setDate(cutoffFrom.getDate() - days + 1); cutoffFrom.setHours(0,0,0,0);
+    cutoffTo = new Date(); cutoffTo.setHours(23,59,59,999);
+  }
   const all = [
     ...(JSON.parse(localStorage.getItem('bp.synced')||'[]')),
     ...(JSON.parse(localStorage.getItem('bp.queue')||'[]'))
   ];
   const byDay = {};
   all.forEach(r => {
-    const dt = new Date(r.recordedAt);
-    if (isNaN(dt) || dt < cutoff) return;
+    const dt = parseLocalTime(r.recordedAt);
+    if (!dt || dt < cutoffFrom || dt > cutoffTo) return;
     if (r.session !== 'morning' && r.session !== 'evening') return;
-    const k = dt.toISOString().slice(0,10);
+    const k = localDateKey(dt);
     if (!byDay[k]) byDay[k] = { morning:[], evening:[] };
     byDay[k][r.session].push({ s:r.systolic, d:r.diastolic, p:r.pulse });
   });
@@ -425,7 +473,9 @@ function exportCSV() {
   const blob = new Blob([rows.join('\n')], { type:'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `bp-${currentRange}-${new Date().toISOString().slice(0,10)}.csv`;
+  const tag = (currentRange === 'custom' && currentFrom && currentTo)
+    ? `${currentFrom}_to_${currentTo}` : currentRange;
+  a.download = `bp-${tag}-${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
 }
 
@@ -434,8 +484,54 @@ $$('.range-tabs button').forEach(btn => {
     $$('.range-tabs button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentRange = btn.dataset.range;
-    loadStats(currentRange);
+    if (currentRange === 'custom') {
+      $('#customRange').hidden = false;
+      // 預設：今天 與 7 天前
+      const today = new Date(), prev = new Date(); prev.setDate(today.getDate() - 6);
+      const pad = n => String(n).padStart(2,'0');
+      const fmtD = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      if (!$('#dateFrom').value) $('#dateFrom').value = fmtD(prev);
+      if (!$('#dateTo').value)   $('#dateTo').value   = fmtD(today);
+    } else {
+      $('#customRange').hidden = true;
+      currentFrom = currentTo = null;
+      loadStats(currentRange);
+    }
   });
+});
+
+function applyCustomRange() {
+  const from = $('#dateFrom').value;
+  const to   = $('#dateTo').value;
+  if (!from || !to) { alert('請選擇起始與結束日期'); return; }
+  if (from > to)    { alert('起始日期不能晚於結束日期'); return; }
+  currentFrom = from; currentTo = to;
+  loadStats('custom', from, to);
+}
+$('#applyRange').addEventListener('click', applyCustomRange);
+
+function quickSetRange(from, to) {
+  $('#dateFrom').value = from;
+  $('#dateTo').value   = to;
+  applyCustomRange();
+}
+const pad = n => String(n).padStart(2,'0');
+const fmtD = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+$('#quickThisMonth').addEventListener('click', () => {
+  const today = new Date();
+  const first = new Date(today.getFullYear(), today.getMonth(), 1);
+  quickSetRange(fmtD(first), fmtD(today));
+});
+$('#quickLastMonth').addEventListener('click', () => {
+  const today = new Date();
+  const first = new Date(today.getFullYear(), today.getMonth()-1, 1);
+  const last  = new Date(today.getFullYear(), today.getMonth(), 0);
+  quickSetRange(fmtD(first), fmtD(last));
+});
+$('#quickYTD').addEventListener('click', () => {
+  const today = new Date();
+  const first = new Date(today.getFullYear(), 0, 1);
+  quickSetRange(fmtD(first), fmtD(today));
 });
 
 if ('serviceWorker' in navigator) {
