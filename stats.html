@@ -299,7 +299,8 @@ function computeLocalStats(range, fromStr, toStr) {
       eveningSBP:ev.s, eveningDBP:ev.d, eveningCount:byDay[date].evening.length,
       dailySBP, dailyDBP,
       morningSurge: (m.s && ev.s) ? (m.s - ev.s) : null,
-      targetMet: dailySBP < TARGET_SBP && dailyDBP < TARGET_DBP
+      // 達標：「小於或等於」130/80（台灣高血壓學會 2022）
+      targetMet: dailySBP <= TARGET_SBP && dailyDBP <= TARGET_DBP
     };
   });
   const mean = (arr, key) => {
@@ -349,7 +350,7 @@ function render(data, offline) {
       <div>
         <h2 style="margin:0;font-size:var(--text-lg);">期間摘要</h2>
         <p class="muted" style="margin:0.25rem 0 0;font-size:var(--text-sm);">
-          ${d.length} 天紀錄 · 共 ${s.count} 筆 · 目標 &lt; ${s.targetSBP}/${s.targetDBP} mmHg
+          ${d.length} 天紀錄 · 共 ${s.count} 筆 · 目標 ≦ ${s.targetSBP}/${s.targetDBP} mmHg
         </p>
       </div>
       ${offline ? '<span class="pill offline">離線資料</span>' : '<span class="pill">即時同步</span>'}

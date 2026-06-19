@@ -5,7 +5,7 @@
  *   - Apps Script API：直接 bypass，不過 SW
  *   - 新版安裝完成會主動 postMessage 通知頁面，由頁面決定要不要彈出「發現新版」提示
  */
-const CACHE = 'bp-pwa-v2.12';  // 🔄 統計可選日期區間 + 後端時間解析修正
+const CACHE = 'bp-pwa-v2.13';  // 🔄 達標門檻改為 ≦ 130/80
 const ASSETS = [
   './',
   './index.html',

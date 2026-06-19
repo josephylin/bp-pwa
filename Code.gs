@@ -21,6 +21,41 @@ const SHEET_NAME       = '血壓紀錄';
 const SUMMARY_SHEET    = '每日彙整';
 const SHARED_SECRET    = 'CHANGE_ME_to_a_random_string';
 
+// ⏰ 時區：所有寫入 Sheet 的時間都以此為準（不受 Apps Script 預設或試算表時區影響）
+//    台灣請保留 'Asia/Taipei'；如出差到日本可暫時改為 'Asia/Tokyo'
+const TIMEZONE = 'Asia/Taipei';
+const TIME_FMT = 'yyyy-MM-dd HH:mm:ss';
+
+/** 把任意 Date / ISO 字串轉成「台北時區」的字串 yyyy-MM-dd HH:mm:ss
+ *  防呆版：時區字串寫死，不依賴任何全域常數；同時 fallback 用手動 +8 計算 */
+function _fmtTime(input) {
+  const d = (input instanceof Date) ? input : new Date(input || Date.now());
+  try {
+    const out = Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss');
+    if (out && out.length === 19) return out;
+  } catch (e) { /* fallthrough to manual */ }
+  // 手動 fallback：絕對不受 Apps Script 環境影響
+  const tp = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+  const pad = function(n) { return (n < 10 ? '0' : '') + n; };
+  return tp.getUTCFullYear() + '-' + pad(tp.getUTCMonth() + 1) + '-' + pad(tp.getUTCDate()) +
+         ' ' + pad(tp.getUTCHours()) + ':' + pad(tp.getUTCMinutes()) + ':' + pad(tp.getUTCSeconds());
+}
+/** 取台北時區的 yyyy-MM-dd 日期鍵 */
+function _dateKey(input) {
+  return _fmtTime(input).substring(0, 10);
+}
+
+/** 診斷函式：手動執行，看下面各種時區輸出，貼給我 */
+function _debugTimezone() {
+  const now = new Date();
+  Logger.log('1. toISOString (UTC):       ' + now.toISOString());
+  Logger.log('2. _fmtTime (期望台北):    ' + _fmtTime(now));
+  Logger.log('3. 寫死 Asia/Taipei:        ' + Utilities.formatDate(now, 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss'));
+  Logger.log('4. 試算表時區:              ' + SpreadsheetApp.getActive().getSpreadsheetTimeZone());
+  Logger.log('5. Apps Script 時區:        ' + Session.getScriptTimeZone());
+  Logger.log('6. 由 ISO 轉回顯示:          ' + new Date(now.toISOString()).toString());
+}
+
 // 時段判定 (24h)
 const MORNING_START = 5;   // 05:00
 const MORNING_END   = 11;  // 11:00 (不含)
@@ -28,6 +63,7 @@ const EVENING_START = 18;  // 18:00
 const EVENING_END   = 26;  // 02:00 隔日 (用 24+2 表達)
 
 // 血壓達標門檻（家庭量測標準，依台灣高血壓學會 2022 指引）
+// 達標定義：日均 SBP ≦ 130 且 DBP ≦ 80
 const TARGET_SBP = 130;
 const TARGET_DBP = 80;
 // =============================
@@ -77,24 +113,27 @@ function doPost(e) {
     const sheet = _getOrCreateSheet();
     const existingIds = _getExistingClientIds(sheet);
     const accepted = [], skipped = [], rows = [];
-    const now = new Date().toISOString();
+    const nowDate = new Date();
+    const nowStr  = _fmtTime(nowDate);   // 台北時區字串
 
     records.forEach(function(r) {
       const cid = String(r.clientId || '').trim();
       if (!cid) return;
       if (existingIds[cid]) { skipped.push(cid); return; }
 
-      const dt = new Date(r.recordedAt || now);
+      const dt = r.recordedAt ? new Date(r.recordedAt) : nowDate;
       const session = r.session || _detectSession(dt);
       // pairIndex 由前端送，若沒給就在這裡推算
       const pairIndex = r.pairIndex || _nextPairIndex(sheet, dt, session);
 
       rows.push([
-        r.recordedAt || now, session, pairIndex,
+        _fmtTime(dt),               // ✅ 以 Asia/Taipei 寫入，避免 Sheet 二次解讀時區
+        session, pairIndex,
         Number(r.systolic) || '', Number(r.diastolic) || '',
         r.pulse ? Number(r.pulse) : '',
         r.arm || '', r.position || '', r.note || '',
-        cid, now
+        cid,
+        nowStr                      // ✅ 同上
       ]);
       accepted.push(cid);
       existingIds[cid] = true;
@@ -126,22 +165,33 @@ function doPost(e) {
  * }
  */
 function _buildStats(params) {
+  // 支援三種區間指定方式：
+  //   1) range=week|month|all（舊接口）
+  //   2) from=YYYY-MM-DD & to=YYYY-MM-DD（新：自訂區間）
+  //   3) 兩者同存時以 from/to 為主
   const range = params.range || 'week';
-  const days = range === 'month' ? 30 : (range === 'all' ? 9999 : 7);
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days + 1);
-  cutoff.setHours(0,0,0,0);
+  let cutoffFrom, cutoffTo;
+  if (params.from || params.to) {
+    cutoffFrom = params.from ? _parseDateOnly(params.from, false) : new Date(1970,0,1);
+    cutoffTo   = params.to   ? _parseDateOnly(params.to,   true)  : _parseDateOnly(Utilities.formatDate(new Date(), TIMEZONE, 'yyyy-MM-dd'), true);
+  } else {
+    const days = range === 'month' ? 30 : (range === 'all' ? 9999 : 7);
+    cutoffFrom = new Date(); cutoffFrom.setDate(cutoffFrom.getDate() - days + 1);
+    cutoffFrom.setHours(0,0,0,0);
+    cutoffTo = new Date(); cutoffTo.setHours(23,59,59,999);
+  }
 
   const sh = _getOrCreateSheet();
   const last = sh.getLastRow();
-  if (last < 2) return { ok:true, range, daily:[], summary:_emptySummary() };
+  if (last < 2) return { ok:true, range, from:Utilities.formatDate(cutoffFrom,TIMEZONE,'yyyy-MM-dd'), to:Utilities.formatDate(cutoffTo,TIMEZONE,'yyyy-MM-dd'), daily:[], summary:_emptySummary() };
 
   const data = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
   const byDay = {}; // date -> { morning:[{s,d,p}], evening:[{s,d,p}] }
 
   data.forEach(function(row) {
-    const dt = new Date(row[0]);
-    if (isNaN(dt) || dt < cutoff) return;
-    const dateKey = Utilities.formatDate(dt, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const dt = _parseTime(row[0]);
+    if (!dt || dt < cutoffFrom || dt > cutoffTo) return;
+    const dateKey = Utilities.formatDate(dt, TIMEZONE, 'yyyy-MM-dd');
     const session = row[1];
     const s = Number(row[3]), d = Number(row[4]), p = Number(row[5]);
     if (!s || !d) return;
@@ -163,7 +213,8 @@ function _buildStats(params) {
       eveningSBP:evAvg.s, eveningDBP:evAvg.d, eveningPulse:evAvg.p, eveningCount:ev.length,
       dailySBP, dailyDBP,
       morningSurge: (mAvg.s && evAvg.s) ? (mAvg.s - evAvg.s) : null,
-      targetMet: (dailySBP !== null && dailyDBP !== null && dailySBP < TARGET_SBP && dailyDBP < TARGET_DBP)
+      // 達標：「小於或等於」130/80（台灣高血壓學會 2022）
+      targetMet: (dailySBP !== null && dailyDBP !== null && dailySBP <= TARGET_SBP && dailyDBP <= TARGET_DBP)
     };
   });
 
@@ -200,7 +251,41 @@ function _buildStats(params) {
     targetDBP: TARGET_DBP
   };
 
-  return { ok:true, range, generatedAt:new Date().toISOString(), summary, daily };
+  return {
+    ok:true, range,
+    from: Utilities.formatDate(cutoffFrom, TIMEZONE, 'yyyy-MM-dd'),
+    to:   Utilities.formatDate(cutoffTo,   TIMEZONE, 'yyyy-MM-dd'),
+    generatedAt: new Date().toISOString(),
+    summary, daily
+  };
+}
+
+/* 容錯解析：接受 Date / ISO / 'yyyy-MM-dd HH:mm:ss' / 'yyyy/MM/dd HH:mm:ss' */
+function _parseTime(v) {
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v) ? null : v;
+  const s = String(v).trim();
+  // 先試 ISO、再試 'YYYY-MM-DD HH:mm:ss' 表達式
+  const m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})[ T](\d{1,2}):(\d{1,2}):(\d{1,2})/);
+  if (m) {
+    // 以 TIMEZONE 本地時間解讀：透過 Utilities.parseDate 避免 UTC 偏移
+    try {
+      return Utilities.parseDate(
+        m[1]+'-'+_pad(m[2])+'-'+_pad(m[3])+' '+_pad(m[4])+':'+_pad(m[5])+':'+_pad(m[6]),
+        TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
+    } catch (e) { /* fallthrough */ }
+  }
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+function _pad(n) { return String(n).length === 1 ? '0'+n : String(n); }
+
+/* 接受 'YYYY-MM-DD'，回傳本時区 00:00 (start) 或 23:59:59 (end) */
+function _parseDateOnly(s, isEnd) {
+  const m = String(s).match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m) return isEnd ? new Date(2999,0,1) : new Date(1970,0,1);
+  const tag = m[1]+'-'+_pad(m[2])+'-'+_pad(m[3])+' '+(isEnd?'23:59:59':'00:00:00');
+  return Utilities.parseDate(tag, TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
 }
 
 function _emptySummary() {
@@ -265,13 +350,13 @@ function _detectSession(dt) {
 function _nextPairIndex(sheet, dt, session) {
   const last = sheet.getLastRow();
   if (last < 2) return 1;
-  const dateKey = Utilities.formatDate(dt, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const dateKey = Utilities.formatDate(dt, TIMEZONE, 'yyyy-MM-dd');
   const data = sheet.getRange(2, 1, last - 1, 3).getValues(); // recordedAt, session, pairIndex
   let max = 0;
   data.forEach(function(r) {
     const rd = new Date(r[0]);
     if (isNaN(rd)) return;
-    const rk = Utilities.formatDate(rd, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const rk = Utilities.formatDate(rd, TIMEZONE, 'yyyy-MM-dd');
     if (rk === dateKey && r[1] === session) {
       const n = Number(r[2]) || 0;
       if (n > max) max = n;
@@ -321,6 +406,53 @@ function setupSheet() {
 }
 
 /**
+ * 🔧 一次性修護：把已存在的 recordedAt / syncedAt 欄位
+ * 重新格式化為 TIMEZONE（例如 Asia/Taipei）的 yyyy-MM-dd HH:mm:ss。
+ * 適用時機：之前寫入的資料在 Sheet 上顕示時間有誤（差 8 小時、UTC、烘組 ISO 字串等）。
+ * 執行方式：Apps Script 編輯器 → 選 fixTimezoneInExistingRows → 執行。
+ */
+function fixTimezoneInExistingRows() {
+  const sh = _getOrCreateSheet();
+  const last = sh.getLastRow();
+  if (last < 2) { Logger.log('沒有資料需要修護'); return; }
+
+  const headerRow = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  const colRecorded = headerRow.indexOf('recordedAt') + 1;   // 1-based
+  const colSynced   = headerRow.indexOf('syncedAt') + 1;
+  if (colRecorded < 1) { Logger.log('找不到 recordedAt 欄'); return; }
+
+  const recValues = sh.getRange(2, colRecorded, last - 1, 1).getValues();
+  const newRec = recValues.map(function(row) {
+    const v = row[0];
+    if (!v) return [''];
+    // 如果已是 yyyy-MM-dd HH:mm:ss 按台北時區重格；Date 物件也能吃
+    const d = (v instanceof Date) ? v : new Date(v);
+    if (isNaN(d.getTime())) return [String(v)];   // 無法解讀就保留原樣
+    return [_fmtTime(d)];
+  });
+  sh.getRange(2, colRecorded, last - 1, 1).setValues(newRec);
+
+  if (colSynced > 0) {
+    const synValues = sh.getRange(2, colSynced, last - 1, 1).getValues();
+    const newSyn = synValues.map(function(row) {
+      const v = row[0];
+      if (!v) return [''];
+      const d = (v instanceof Date) ? v : new Date(v);
+      if (isNaN(d.getTime())) return [String(v)];
+      return [_fmtTime(d)];
+    });
+    sh.getRange(2, colSynced, last - 1, 1).setValues(newSyn);
+  }
+
+  // 讓儲存格按「純文字」顯示，避免 Sheet 再把它当成日期重新解讀
+  sh.getRange(2, colRecorded, last - 1, 1).setNumberFormat('@');
+  if (colSynced > 0) sh.getRange(2, colSynced, last - 1, 1).setNumberFormat('@');
+
+  _rebuildSummary();
+  Logger.log('已修護 ' + (last - 1) + ' 筆資料的時間為 ' + TIMEZONE);
+}
+
+/**
  * 從 v1 升級：補上 session / pairIndex 欄位
  * v1 欄位：recordedAt, systolic, diastolic, pulse, arm, position, note, clientId, syncedAt
  * v2 欄位：recordedAt, session, pairIndex, systolic, diastolic, pulse, arm, position, note, clientId, syncedAt
@@ -367,7 +499,7 @@ function _recomputePairIndex() {
 
   indexed.forEach(function(item) {
     const dt = new Date(item.r[0]);
-    const key = Utilities.formatDate(dt, Session.getScriptTimeZone(), 'yyyy-MM-dd') + '|' + item.r[1];
+    const key = Utilities.formatDate(dt, TIMEZONE, 'yyyy-MM-dd') + '|' + item.r[1];
     counters[key] = (counters[key] || 0) + 1;
     item.r[2] = counters[key];
   });
