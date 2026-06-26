@@ -109,6 +109,11 @@
   .kpi.target.ok   .value { color: var(--color-success); }
   .kpi.target.warn { border-left: 3px solid var(--color-warning); }
   .kpi.target.warn .value { color: var(--color-warning); }
+  .kpi.pulse { border-left: 3px solid #e07b9c; }
+  .kpi.pulse .value { color: #c8456f; }
+  .pulse-section { margin-top: var(--space-5); padding-top: var(--space-5);
+                   border-top: 1px solid color-mix(in oklab, var(--color-text) 8%, transparent); }
+  .pulse-section h3 { margin: 0 0 var(--space-3); font-size: var(--text-base); font-weight: 700; }
 
   canvas { width: 100% !important; height: 300px !important; }
 
@@ -293,11 +298,12 @@ function computeLocalStats(range, fromStr, toStr) {
     const m = avg(byDay[date].morning), ev = avg(byDay[date].evening);
     const dailySBP = (m.s && ev.s) ? Math.round((m.s+ev.s)/2) : (m.s||ev.s||null);
     const dailyDBP = (m.d && ev.d) ? Math.round((m.d+ev.d)/2) : (m.d||ev.d||null);
+    const dailyPulse = (m.p && ev.p) ? Math.round((m.p+ev.p)/2) : (m.p||ev.p||null);
     return {
       date,
-      morningSBP:m.s, morningDBP:m.d, morningCount:byDay[date].morning.length,
-      eveningSBP:ev.s, eveningDBP:ev.d, eveningCount:byDay[date].evening.length,
-      dailySBP, dailyDBP,
+      morningSBP:m.s, morningDBP:m.d, morningPulse:m.p, morningCount:byDay[date].morning.length,
+      eveningSBP:ev.s, eveningDBP:ev.d, eveningPulse:ev.p, eveningCount:byDay[date].evening.length,
+      dailySBP, dailyDBP, dailyPulse,
       morningSurge: (m.s && ev.s) ? (m.s - ev.s) : null,
       // 達標：「小於或等於」130/80（台灣高血壓學會 2022）
       targetMet: dailySBP <= TARGET_SBP && dailyDBP <= TARGET_DBP
@@ -315,6 +321,8 @@ function computeLocalStats(range, fromStr, toStr) {
     const v = arr.map(x=>x[key]).filter(x=>typeof x==='number');
     return v.length ? Math.min(...v) : null;
   };
+  const PULSE_LOW = 60, PULSE_HIGH = 100;
+  const dpv = daily.map(d=>d.dailyPulse).filter(v=>typeof v === 'number');
   return {
     ok:true, range, generatedAt:new Date().toISOString(),
     summary: {
@@ -322,7 +330,14 @@ function computeLocalStats(range, fromStr, toStr) {
       avgMorningSBP: mean(daily,'morningSBP'), avgMorningDBP: mean(daily,'morningDBP'),
       avgEveningSBP: mean(daily,'eveningSBP'), avgEveningDBP: mean(daily,'eveningDBP'),
       avgDailySBP:   mean(daily,'dailySBP'),   avgDailyDBP:   mean(daily,'dailyDBP'),
+      avgMorningPulse: mean(daily,'morningPulse'),
+      avgEveningPulse: mean(daily,'eveningPulse'),
+      avgDailyPulse:   mean(daily,'dailyPulse'),
       maxSBP: max(daily,'dailySBP'), minSBP: min(daily,'dailySBP'),
+      maxPulse: max(daily,'dailyPulse'), minPulse: min(daily,'dailyPulse'),
+      pulseInRangeDays: dpv.filter(v=>v>=PULSE_LOW && v<=PULSE_HIGH).length,
+      pulseDays: dpv.length,
+      pulseLow: PULSE_LOW, pulseHigh: PULSE_HIGH,
       avgMorningSurge: mean(daily,'morningSurge'),
       targetMetDays: daily.filter(d=>d.targetMet).length,
       targetMetRate: daily.length ? Math.round(daily.filter(d=>d.targetMet).length / daily.length * 100) : 0,
@@ -386,6 +401,33 @@ function render(data, offline) {
         ${surgeWarn ? '<span class="warn-text"> · 偏高，建議與醫師討論</span>' : ''}
       </div>` : ''}
 
+    ${s.avgDailyPulse !== null && s.avgDailyPulse !== undefined ? `
+      <div class="pulse-section">
+        <h3>💗 心跳分析</h3>
+        <div class="kpi-grid">
+          <div class="kpi pulse">
+            <span class="label">⛅ 早晨心跳</span>
+            <div class="value">${fmt(s.avgMorningPulse)}</div>
+            <div class="sub">bpm</div>
+          </div>
+          <div class="kpi pulse">
+            <span class="label">🌙 晚間心跳</span>
+            <div class="value">${fmt(s.avgEveningPulse)}</div>
+            <div class="sub">bpm</div>
+          </div>
+          <div class="kpi pulse">
+            <span class="label">日均心跳</span>
+            <div class="value">${fmt(s.avgDailyPulse)}</div>
+            <div class="sub">最高 ${fmt(s.maxPulse)} · 最低 ${fmt(s.minPulse)} bpm</div>
+          </div>
+          <div class="kpi target ${(s.pulseDays > 0 && s.pulseInRangeDays === s.pulseDays) ? 'ok' : 'warn'}">
+            <span class="label">静息範圍內</span>
+            <div class="value">${s.pulseDays ? Math.round(s.pulseInRangeDays / s.pulseDays * 100) : 0}%</div>
+            <div class="sub">${s.pulseInRangeDays} / ${s.pulseDays} 天 · 參考 ${s.pulseLow}–${s.pulseHigh} bpm</div>
+          </div>
+        </div>
+      </div>` : ''}
+
     <hr style="margin:1.5rem 0;border:0;border-top:1px solid color-mix(in oklab, var(--color-text) 8%, transparent);">
 
     <h2 style="margin:0 0 1rem;font-size:var(--text-lg);">趨勢圖</h2>
@@ -395,6 +437,7 @@ function render(data, offline) {
       <span><span class="swatch" style="background:${COLORS.evening}"></span>晚間 SBP</span>
       <span><span class="swatch" style="background:${COLORS.daily}"></span>日均 SBP</span>
       <span><span class="swatch" style="background:${COLORS.target}"></span>目標 ${s.targetSBP}</span>
+      <span><span class="swatch" style="background:#c8456f"></span>日均心跳</span>
     </div>
 
     <hr style="margin:1.5rem 0;border:0;border-top:1px solid color-mix(in oklab, var(--color-text) 8%, transparent);">
@@ -403,7 +446,7 @@ function render(data, offline) {
     <div style="overflow-x:auto;">
       <table>
         <thead><tr>
-          <th>日期</th><th>早晨</th><th>晚間</th><th>日均</th><th>晨峰</th><th>達標</th>
+          <th>日期</th><th>早晨</th><th>晚間</th><th>日均</th><th>心跳</th><th>晨峰</th><th>達標</th>
         </tr></thead>
         <tbody>
           ${d.slice().reverse().map(row => `
@@ -412,6 +455,7 @@ function render(data, offline) {
               <td>${row.morningSBP?`${row.morningSBP}/${row.morningDBP}`:'—'} <span class="muted">(${row.morningCount})</span></td>
               <td>${row.eveningSBP?`${row.eveningSBP}/${row.eveningDBP}`:'—'} <span class="muted">(${row.eveningCount})</span></td>
               <td><strong>${row.dailySBP?`${row.dailySBP}/${row.dailyDBP}`:'—'}</strong></td>
+              <td>${row.dailyPulse ? row.dailyPulse + ' bpm' : '—'}</td>
               <td>${row.morningSurge !== null ? (row.morningSurge>0?'+':'')+row.morningSurge : '—'}</td>
               <td><span class="badge-dot ${row.targetMet?'ok':'no'}"></span></td>
             </tr>`).join('')}
@@ -448,17 +492,26 @@ function drawChart(daily, targetSBP) {
           borderColor: COLORS.daily, backgroundColor: COLORS.daily,
           tension: 0.25, spanGaps: true, pointRadius: 4, borderWidth: 2.5 },
         { label: `目標 ${targetSBP}`, data: daily.map(() => targetSBP),
-          borderColor: COLORS.target, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0 }
+          borderColor: COLORS.target, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0,
+          yAxisID: 'y' },
+        { label: '日均心跳', data: daily.map(d => d.dailyPulse),
+          borderColor: '#c8456f', backgroundColor: '#c8456f',
+          borderDash: [3, 3], tension: 0.25, spanGaps: true, pointRadius: 2.5, borderWidth: 1.8,
+          yAxisID: 'yPulse' }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        y: { suggestedMin: 90, suggestedMax: 170,
+        y: { suggestedMin: 90, suggestedMax: 170, position: 'left',
              title: { display: true, text: 'mmHg', color: COLORS.axis, font: { weight: 700 } },
              grid: { color: COLORS.grid },
              ticks: { color: COLORS.axis, font: { weight: 600, size: 11 } } },
+        yPulse: { suggestedMin: 50, suggestedMax: 110, position: 'right',
+             title: { display: true, text: 'bpm', color: '#c8456f', font: { weight: 700 } },
+             grid: { display: false },
+             ticks: { color: '#c8456f', font: { weight: 600, size: 11 } } },
         x: { grid: { color: COLORS.grid },
              ticks: { color: COLORS.axis, font: { weight: 600, size: 11 } } }
       }
@@ -469,7 +522,7 @@ function drawChart(daily, targetSBP) {
 function exportCSV() {
   const d = window._lastDaily || [];
   if (!d.length) return;
-  const header = ['date','morningSBP','morningDBP','morningCount','eveningSBP','eveningDBP','eveningCount','dailySBP','dailyDBP','morningSurge','targetMet'];
+  const header = ['date','morningSBP','morningDBP','morningPulse','morningCount','eveningSBP','eveningDBP','eveningPulse','eveningCount','dailySBP','dailyDBP','dailyPulse','morningSurge','targetMet'];
   const rows = [header.join(',')].concat(d.map(r => header.map(k => r[k] == null ? '' : r[k]).join(',')));
   const blob = new Blob([rows.join('\n')], { type:'text/csv' });
   const a = document.createElement('a');
