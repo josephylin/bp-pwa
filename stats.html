@@ -131,6 +131,33 @@
   tr.partial-day td { font-style: italic; }
   .partial-mark { font-size: 0.8em; opacity: 0.8; }
   .missing { color: var(--color-text-muted); font-size: 0.85em; opacity: 0.7; }
+  /* 達標率定義 — 可展開說明卷 */
+  .target-def { margin-top: var(--space-4); padding: var(--space-3) var(--space-4);
+                background: var(--color-surface-offset);
+                border: 1px solid color-mix(in oklab, var(--color-text) 6%, transparent);
+                border-radius: var(--radius-md); font-size: var(--text-sm); }
+  .target-def summary { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+                        cursor: pointer; list-style: none; outline: none; user-select: none; }
+  .target-def summary::-webkit-details-marker { display: none; }
+  .target-def summary::before { content: '▸'; font-size: 0.75em; opacity: 0.5;
+                                transition: transform 0.15s; }
+  .target-def[open] summary::before { transform: rotate(90deg); }
+  .target-def-key { font-weight: 700; color: var(--color-text); }
+  .target-def-now { font-size: 0.85em; color: var(--color-text-muted); }
+  .target-def-body { margin-top: var(--space-3); padding-top: var(--space-3);
+                     border-top: 1px solid color-mix(in oklab, var(--color-text) 6%, transparent); }
+  .target-def-body p { margin: 0 0 var(--space-2); line-height: 1.6; }
+  .target-def-body p:last-child { margin-bottom: 0; }
+  .target-def-body .small { font-size: 0.85em; }
+  .badge-strict, .badge-loose { display: inline-block; padding: 0.1rem 0.5rem; margin-right: 0.4rem;
+                                font-size: 0.72rem; font-weight: 700; border-radius: 999px;
+                                letter-spacing: 0.04em; vertical-align: 1px; }
+  .badge-strict { color: var(--color-success);
+                  background: color-mix(in oklab, var(--color-success) 14%, transparent);
+                  border: 1px solid color-mix(in oklab, var(--color-success) 50%, transparent); }
+  .badge-loose  { color: var(--color-blue);
+                  background: color-mix(in oklab, var(--color-blue) 14%, transparent);
+                  border: 1px solid color-mix(in oklab, var(--color-blue) 50%, transparent); }
 
   canvas { width: 100% !important; height: 300px !important; }
 
@@ -423,10 +450,23 @@ function render(data, offline) {
             <span id="modeLabel">嚴格</span>
           </button>
         </span>
-        <div class="value" id="targetValue">${s.targetMetRate}%</div>
-        <div class="sub" id="targetSub">${s.targetMetDays} / ${s.completeDays != null ? s.completeDays : s.totalDays} 完整日達標${s.partialDays ? ` · 另 ${s.partialDays} 部分日` : ''}</div>
+        <div class="value" id="targetValue">—</div>
+        <div class="sub" id="targetSub">—</div>
       </div>
     </div>
+
+    <!-- 達標率計算口徑說明（幫助使用者、醫師一眼讀懂數字代表什麼）-->
+    <details class="target-def" id="targetDef">
+      <summary>
+        <span class="target-def-key">達標率定義</span>
+        <span class="target-def-now" id="targetDefNow">嚴格：完整量測日的達標比例</span>
+      </summary>
+      <div class="target-def-body">
+        <p><span class="badge-strict">嚴格</span> 完整日達標數 ÷ 完整量測日數（只計「早+晚都量」的日子）</p>
+        <p><span class="badge-loose">寬鬆</span> 達標日數（含部分日） ÷ 所有量測日數（包含只量一段的日子，但不含完全沒量的日子）</p>
+        <p class="muted small">血壓達標標準：日均 ≤ ${s.targetSBP}/${s.targetDBP} mmHg；心跳達標標準：日均 60–100 bpm。兩者都是「達醫學參考值」的比例，不是量測完成度。</p>
+      </div>
+    </details>
 
     ${s.avgMorningSurge !== null ? `
       <div class="muted" style="margin-top:1rem;font-size:var(--text-sm);">
@@ -460,8 +500,8 @@ function render(data, offline) {
                 <span id="pulseModeLabel">嚴格</span>
               </button>
             </span>
-            <div class="value" id="pulseTargetValue">${s.pulseMetRate != null ? s.pulseMetRate : 0}%</div>
-            <div class="sub" id="pulseTargetSub">${s.pulseMetDays != null ? s.pulseMetDays : 0} / ${s.completeDays != null ? s.completeDays : (s.totalDays || 0)} 完整日在 60–100 bpm</div>
+            <div class="value" id="pulseTargetValue">—</div>
+            <div class="sub" id="pulseTargetSub">—</div>
           </div>
         </div>
       </div>` : ''}
@@ -579,6 +619,14 @@ function applyTargetMode() {
     daysKey:'pulseMetDays', daysLooseKey:'pulseMetDaysLoose',
     strictSub:'完整日在 60–100 bpm', looseSub:'量測日在 60–100 bpm（含部分日）'
   });
+
+  // ③ 定義卷右側「目前採用」提示同步切換
+  const defNow = document.getElementById('targetDefNow');
+  if (defNow) {
+    defNow.innerText = (mode === 'loose')
+      ? '寬鬆：所有量測日的達標比例'
+      : '嚴格：完整量測日的達標比例';
+  }
 }
 
 function drawChart(daily, targetSBP) {
