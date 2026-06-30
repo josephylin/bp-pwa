@@ -218,7 +218,9 @@ function _buildStats(params) {
       isComplete,
       morningSurge: isComplete ? (mAvg.s - evAvg.s) : null,
       // 達標：「小於或等於」130/80（台灣高血壓學會 2022）
-      targetMet: (dailySBP !== null && dailyDBP !== null && dailySBP <= TARGET_SBP && dailyDBP <= TARGET_DBP)
+      targetMet: (dailySBP !== null && dailyDBP !== null && dailySBP <= TARGET_SBP && dailyDBP <= TARGET_DBP),
+      // 心跳達標：那一日的日均心跳在 60–100 bpm（AHA 靜息心率）
+      pulseMet:  (dailyPulse !== null && dailyPulse >= 60 && dailyPulse <= 100)
     };
   });
 
@@ -272,6 +274,11 @@ function _buildStats(params) {
     targetMetDaysLoose:   daily.filter(function(d){return d.targetMet;}).length,
     targetMetRate:        (function(){ var c = daily.filter(function(d){return d.isComplete;}).length; return c ? Math.round(daily.filter(function(d){return d.targetMet && d.isComplete;}).length / c * 100) : 0; })(),
     targetMetRateLoose:   daily.length ? Math.round(daily.filter(function(d){return d.targetMet;}).length / daily.length * 100) : 0,
+    // 心跳達標率（與血壓達標率平行，同樣提供嚴格/寬鬆兩口徑）
+    pulseMetDays:         daily.filter(function(d){return d.pulseMet && d.isComplete;}).length,
+    pulseMetDaysLoose:    daily.filter(function(d){return d.pulseMet;}).length,
+    pulseMetRate:         (function(){ var c = daily.filter(function(d){return d.isComplete;}).length; return c ? Math.round(daily.filter(function(d){return d.pulseMet && d.isComplete;}).length / c * 100) : 0; })(),
+    pulseMetRateLoose:    daily.length ? Math.round(daily.filter(function(d){return d.pulseMet;}).length / daily.length * 100) : 0,
     targetSBP: TARGET_SBP,
     targetDBP: TARGET_DBP
   };

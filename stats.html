@@ -325,7 +325,9 @@ function computeLocalStats(range, fromStr, toStr) {
       isComplete,
       morningSurge: isComplete ? (m.s - ev.s) : null,
       // 達標：「小於或等於」130/80（台灣高血壓學會 2022）
-      targetMet: dailySBP <= TARGET_SBP && dailyDBP <= TARGET_DBP
+      targetMet: dailySBP <= TARGET_SBP && dailyDBP <= TARGET_DBP,
+      // 心跳達標：日均心跳 60–100 bpm（AHA 靜息心率參考值）
+      pulseMet: dailyPulse !== null && dailyPulse >= 60 && dailyPulse <= 100
     };
   });
   const mean = (arr, key) => {
@@ -364,6 +366,11 @@ function computeLocalStats(range, fromStr, toStr) {
       targetMetDaysLoose: daily.filter(d=>d.targetMet).length,
       targetMetRate:      (()=>{ const c = daily.filter(d=>d.isComplete).length; return c ? Math.round(daily.filter(d=>d.targetMet && d.isComplete).length / c * 100) : 0; })(),
       targetMetRateLoose: daily.length ? Math.round(daily.filter(d=>d.targetMet).length / daily.length * 100) : 0,
+      // 心跳達標率（與血壓達標率平行）
+      pulseMetDays:       daily.filter(d=>d.pulseMet && d.isComplete).length,
+      pulseMetDaysLoose:  daily.filter(d=>d.pulseMet).length,
+      pulseMetRate:       (()=>{ const c = daily.filter(d=>d.isComplete).length; return c ? Math.round(daily.filter(d=>d.pulseMet && d.isComplete).length / c * 100) : 0; })(),
+      pulseMetRateLoose:  daily.length ? Math.round(daily.filter(d=>d.pulseMet).length / daily.length * 100) : 0,
       targetSBP: TARGET_SBP, targetDBP: TARGET_DBP
     },
     daily
@@ -447,10 +454,14 @@ function render(data, offline) {
             <div class="value">${fmt(s.avgDailyPulse)}</div>
             <div class="sub">最高 ${fmt(s.maxPulse)} · 最低 ${fmt(s.minPulse)} bpm</div>
           </div>
-          <div class="kpi target ${(s.pulseDays > 0 && s.pulseInRangeDays === s.pulseDays) ? 'ok' : 'warn'}">
-            <span class="label">静息範圍內</span>
-            <div class="value">${s.pulseDays ? Math.round(s.pulseInRangeDays / s.pulseDays * 100) : 0}%</div>
-            <div class="sub">${s.pulseInRangeDays} / ${s.pulseDays} 天 · 參考 ${s.pulseLow}–${s.pulseHigh} bpm</div>
+          <div class="kpi target ok" id="pulseTargetCard">
+            <span class="label">心跳達標率
+              <button id="pulseModeToggle" class="mode-toggle is-strict" title="點擊切換：嚴格（只計完整量測日）↔寬鬆（包含漏量日）">
+                <span id="pulseModeLabel">嚴格</span>
+              </button>
+            </span>
+            <div class="value" id="pulseTargetValue">${s.pulseMetRate != null ? s.pulseMetRate : 0}%</div>
+            <div class="sub" id="pulseTargetSub">${s.pulseMetDays != null ? s.pulseMetDays : 0} / ${s.completeDays != null ? s.completeDays : (s.totalDays || 0)} 完整日在 60–100 bpm</div>
           </div>
         </div>
       </div>` : ''}
@@ -499,50 +510,75 @@ function render(data, offline) {
   window._lastDaily = d;
   window._lastSummary = s;
   applyTargetMode();   // 依用戶偏好的嚴格/寬鬆設定重新渲染達標卡
-  // 切換鈕事件（render 重生成的 DOM）
-  const tBtn = document.getElementById('modeToggle');
-  if (tBtn) tBtn.addEventListener('click', () => {
+  // 切換鈕事件（render 重生成的 DOM） — 血壓、心跳兩張卡同步
+  const toggleMode = () => {
     const cur = localStorage.getItem('bp.targetMode') || 'strict';
     localStorage.setItem('bp.targetMode', cur === 'strict' ? 'loose' : 'strict');
     applyTargetMode();
-  });
+  };
+  const tBtn = document.getElementById('modeToggle');
+  if (tBtn) tBtn.addEventListener('click', toggleMode);
+  const pBtn = document.getElementById('pulseModeToggle');
+  if (pBtn) pBtn.addEventListener('click', toggleMode);
 }
 
 function applyTargetMode() {
   const s = window._lastSummary;
   if (!s) return;
   const mode = localStorage.getItem('bp.targetMode') || 'strict';
-  const valueEl = document.getElementById('targetValue');
-  const subEl = document.getElementById('targetSub');
-  const btn = document.getElementById('modeToggle');
-  if (!valueEl || !subEl) return;
-  const card = document.getElementById('targetCard');
-  const label = document.getElementById('modeLabel');
-  if (mode === 'loose') {
-    const rate = (s.targetMetRateLoose != null ? s.targetMetRateLoose : s.targetMetRate);
-    const num  = (s.targetMetDaysLoose != null ? s.targetMetDaysLoose : s.targetMetDays);
-    valueEl.innerText = rate + '%';
-    subEl.innerText   = `${num} / ${s.totalDays} 量測日達標（含部分日）`;
-    if (label) label.innerText = '寬鬆';
-    if (btn)   { btn.classList.remove('is-strict'); btn.classList.add('is-loose'); }
-    if (card)  {
-      card.classList.add('is-loose-mode');
-      card.classList.toggle('ok',   rate >= 80);
-      card.classList.toggle('warn', rate <  80);
+
+  // 通用套用函式：同樣的邏輯抽出來套在血壓、心跳兩張卡
+  const renderCard = (opts) => {
+    const valueEl = document.getElementById(opts.valueId);
+    const subEl   = document.getElementById(opts.subId);
+    const btn     = document.getElementById(opts.btnId);
+    const card    = document.getElementById(opts.cardId);
+    const label   = document.getElementById(opts.labelId);
+    if (!valueEl || !subEl) return;
+    if (mode === 'loose') {
+      const rate = (s[opts.rateLooseKey] != null ? s[opts.rateLooseKey] : s[opts.rateKey]);
+      const num  = (s[opts.daysLooseKey] != null ? s[opts.daysLooseKey] : s[opts.daysKey]);
+      valueEl.innerText = rate + '%';
+      subEl.innerText   = `${num} / ${s.totalDays} ${opts.looseSub}`;
+      if (label) label.innerText = '寬鬆';
+      if (btn)   { btn.classList.remove('is-strict'); btn.classList.add('is-loose'); }
+      if (card)  {
+        card.classList.add('is-loose-mode');
+        card.classList.toggle('ok',   rate >= 80);
+        card.classList.toggle('warn', rate <  80);
+      }
+    } else {
+      const rate = s[opts.rateKey];
+      const c    = s.completeDays != null ? s.completeDays : s.totalDays;
+      valueEl.innerText = (rate != null ? rate : 0) + '%';
+      subEl.innerText   = `${s[opts.daysKey] != null ? s[opts.daysKey] : 0} / ${c} ${opts.strictSub}${s.partialDays ? ` · 另有 ${s.partialDays} 部分日未計入` : ''}`;
+      if (label) label.innerText = '嚴格';
+      if (btn)   { btn.classList.remove('is-loose'); btn.classList.add('is-strict'); }
+      if (card)  {
+        card.classList.remove('is-loose-mode');
+        card.classList.toggle('ok',   rate >= 80);
+        card.classList.toggle('warn', rate <  80);
+      }
     }
-  } else {
-    const rate = s.targetMetRate;
-    const c    = s.completeDays != null ? s.completeDays : s.totalDays;
-    valueEl.innerText = rate + '%';
-    subEl.innerText   = `${s.targetMetDays} / ${c} 完整日達標${s.partialDays ? ` · 另有 ${s.partialDays} 部分日未計入` : ''}`;
-    if (label) label.innerText = '嚴格';
-    if (btn)   { btn.classList.remove('is-loose'); btn.classList.add('is-strict'); }
-    if (card)  {
-      card.classList.remove('is-loose-mode');
-      card.classList.toggle('ok',   rate >= 80);
-      card.classList.toggle('warn', rate <  80);
-    }
-  }
+  };
+
+  // ① 血壓達標卡
+  renderCard({
+    valueId:'targetValue', subId:'targetSub', btnId:'modeToggle',
+    cardId:'targetCard', labelId:'modeLabel',
+    rateKey:'targetMetRate', rateLooseKey:'targetMetRateLoose',
+    daysKey:'targetMetDays', daysLooseKey:'targetMetDaysLoose',
+    strictSub:'完整日達標', looseSub:'量測日達標（含部分日）'
+  });
+
+  // ② 心跳達標卡
+  renderCard({
+    valueId:'pulseTargetValue', subId:'pulseTargetSub', btnId:'pulseModeToggle',
+    cardId:'pulseTargetCard', labelId:'pulseModeLabel',
+    rateKey:'pulseMetRate', rateLooseKey:'pulseMetRateLoose',
+    daysKey:'pulseMetDays', daysLooseKey:'pulseMetDaysLoose',
+    strictSub:'完整日在 60–100 bpm', looseSub:'量測日在 60–100 bpm（含部分日）'
+  });
 }
 
 function drawChart(daily, targetSBP) {
