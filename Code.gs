@@ -207,12 +207,16 @@ function _buildStats(params) {
     const evAvg = _avg(ev);
     const dailySBP = (mAvg.s && evAvg.s) ? Math.round((mAvg.s + evAvg.s)/2) : (mAvg.s || evAvg.s || null);
     const dailyDBP = (mAvg.d && evAvg.d) ? Math.round((mAvg.d + evAvg.d)/2) : (mAvg.d || evAvg.d || null);
+    const dailyPulse = (mAvg.p && evAvg.p) ? Math.round((mAvg.p + evAvg.p)/2) : (mAvg.p || evAvg.p || null);
+    // 完整日：早晚兩段都有量，可供嚴格達標率及晨峰計算
+    const isComplete = (mAvg.s !== null && evAvg.s !== null);
     return {
       date,
       morningSBP:mAvg.s, morningDBP:mAvg.d, morningPulse:mAvg.p, morningCount:m.length,
       eveningSBP:evAvg.s, eveningDBP:evAvg.d, eveningPulse:evAvg.p, eveningCount:ev.length,
-      dailySBP, dailyDBP,
-      morningSurge: (mAvg.s && evAvg.s) ? (mAvg.s - evAvg.s) : null,
+      dailySBP, dailyDBP, dailyPulse,
+      isComplete,
+      morningSurge: isComplete ? (mAvg.s - evAvg.s) : null,
       // 達標：「小於或等於」130/80（台灣高血壓學會 2022）
       targetMet: (dailySBP !== null && dailyDBP !== null && dailySBP <= TARGET_SBP && dailyDBP <= TARGET_DBP)
     };
@@ -233,6 +237,11 @@ function _buildStats(params) {
     return vs.length ? Math.min.apply(null, vs) : null;
   };
 
+  // 静息心跳參考範圍：60–100 bpm（成人）
+  const PULSE_LOW = 60, PULSE_HIGH = 100;
+  const dailyPulseValues = daily.map(function(d){return d.dailyPulse;}).filter(function(v){return typeof v === 'number';});
+  const pulseInRangeDays = dailyPulseValues.filter(function(v){return v >= PULSE_LOW && v <= PULSE_HIGH;}).length;
+
   const summary = {
     count: data.length,
     totalDays: daily.length,
@@ -242,11 +251,27 @@ function _buildStats(params) {
     avgEveningDBP: sumOf(daily, 'eveningDBP'),
     avgDailySBP:   sumOf(daily, 'dailySBP'),
     avgDailyDBP:   sumOf(daily, 'dailyDBP'),
+    avgMorningPulse: sumOf(daily, 'morningPulse'),
+    avgEveningPulse: sumOf(daily, 'eveningPulse'),
+    avgDailyPulse:   sumOf(daily, 'dailyPulse'),
     maxSBP: maxOf(daily, 'dailySBP'),
     minSBP: minOf(daily, 'dailySBP'),
+    maxPulse: maxOf(daily, 'dailyPulse'),
+    minPulse: minOf(daily, 'dailyPulse'),
+    pulseInRangeDays: pulseInRangeDays,
+    pulseDays: dailyPulseValues.length,
+    pulseLow: PULSE_LOW,
+    pulseHigh: PULSE_HIGH,
     avgMorningSurge: sumOf(daily, 'morningSurge'),
-    targetMetDays: daily.filter(function(d){return d.targetMet;}).length,
-    targetMetRate: daily.length ? Math.round(daily.filter(function(d){return d.targetMet;}).length / daily.length * 100) : 0,
+    // 達標率：提供「嚴格」與「寬鬆」兩種口徑
+    //   strict: 只計完整量測日（早晚都有）
+    //   loose:  計所有有量測的日子（原本行為）
+    completeDays:    daily.filter(function(d){return d.isComplete;}).length,
+    partialDays:     daily.filter(function(d){return !d.isComplete;}).length,
+    targetMetDays:        daily.filter(function(d){return d.targetMet && d.isComplete;}).length,
+    targetMetDaysLoose:   daily.filter(function(d){return d.targetMet;}).length,
+    targetMetRate:        (function(){ var c = daily.filter(function(d){return d.isComplete;}).length; return c ? Math.round(daily.filter(function(d){return d.targetMet && d.isComplete;}).length / c * 100) : 0; })(),
+    targetMetRateLoose:   daily.length ? Math.round(daily.filter(function(d){return d.targetMet;}).length / daily.length * 100) : 0,
     targetSBP: TARGET_SBP,
     targetDBP: TARGET_DBP
   };

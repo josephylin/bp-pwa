@@ -114,6 +114,14 @@
   .pulse-section { margin-top: var(--space-5); padding-top: var(--space-5);
                    border-top: 1px solid color-mix(in oklab, var(--color-text) 8%, transparent); }
   .pulse-section h3 { margin: 0 0 var(--space-3); font-size: var(--text-base); font-weight: 700; }
+  .mode-toggle { margin-left: 0.4rem; padding: 0.1rem 0.5rem; font-size: 0.7rem; font-weight: 600;
+                 border: 1px solid var(--color-border); border-radius: 999px;
+                 background: var(--color-surface); color: var(--color-text-muted); cursor: pointer; }
+  .mode-toggle:hover { background: var(--color-surface-offset); }
+  tr.partial-day { background: color-mix(in oklab, var(--color-warning) 4%, transparent); }
+  tr.partial-day td { font-style: italic; }
+  .partial-mark { font-size: 0.8em; opacity: 0.8; }
+  .missing { color: var(--color-text-muted); font-size: 0.85em; opacity: 0.7; }
 
   canvas { width: 100% !important; height: 300px !important; }
 
@@ -299,12 +307,14 @@ function computeLocalStats(range, fromStr, toStr) {
     const dailySBP = (m.s && ev.s) ? Math.round((m.s+ev.s)/2) : (m.s||ev.s||null);
     const dailyDBP = (m.d && ev.d) ? Math.round((m.d+ev.d)/2) : (m.d||ev.d||null);
     const dailyPulse = (m.p && ev.p) ? Math.round((m.p+ev.p)/2) : (m.p||ev.p||null);
+    const isComplete = (m.s !== null && ev.s !== null);
     return {
       date,
       morningSBP:m.s, morningDBP:m.d, morningPulse:m.p, morningCount:byDay[date].morning.length,
       eveningSBP:ev.s, eveningDBP:ev.d, eveningPulse:ev.p, eveningCount:byDay[date].evening.length,
       dailySBP, dailyDBP, dailyPulse,
-      morningSurge: (m.s && ev.s) ? (m.s - ev.s) : null,
+      isComplete,
+      morningSurge: isComplete ? (m.s - ev.s) : null,
       // 達標：「小於或等於」130/80（台灣高血壓學會 2022）
       targetMet: dailySBP <= TARGET_SBP && dailyDBP <= TARGET_DBP
     };
@@ -339,8 +349,12 @@ function computeLocalStats(range, fromStr, toStr) {
       pulseDays: dpv.length,
       pulseLow: PULSE_LOW, pulseHigh: PULSE_HIGH,
       avgMorningSurge: mean(daily,'morningSurge'),
-      targetMetDays: daily.filter(d=>d.targetMet).length,
-      targetMetRate: daily.length ? Math.round(daily.filter(d=>d.targetMet).length / daily.length * 100) : 0,
+      completeDays:  daily.filter(d=>d.isComplete).length,
+      partialDays:   daily.filter(d=>!d.isComplete).length,
+      targetMetDays:      daily.filter(d=>d.targetMet && d.isComplete).length,
+      targetMetDaysLoose: daily.filter(d=>d.targetMet).length,
+      targetMetRate:      (()=>{ const c = daily.filter(d=>d.isComplete).length; return c ? Math.round(daily.filter(d=>d.targetMet && d.isComplete).length / c * 100) : 0; })(),
+      targetMetRateLoose: daily.length ? Math.round(daily.filter(d=>d.targetMet).length / daily.length * 100) : 0,
       targetSBP: TARGET_SBP, targetDBP: TARGET_DBP
     },
     daily
@@ -387,10 +401,14 @@ function render(data, offline) {
         <div class="value">${fmt(s.avgDailySBP)} / ${fmt(s.avgDailyDBP)}</div>
         <div class="sub">最高 ${fmt(s.maxSBP)} · 最低 ${fmt(s.minSBP)}</div>
       </div>
-      <div class="kpi target ${targetOK?'ok':'warn'}">
-        <span class="label">達標率</span>
-        <div class="value">${s.targetMetRate}%</div>
-        <div class="sub">${s.targetMetDays} / ${s.totalDays} 天達標</div>
+      <div class="kpi target ${targetOK?'ok':'warn'}" id="targetCard">
+        <span class="label">達標率
+          <button id="modeToggle" class="mode-toggle" title="切換完整量測日 / 所有量測日">
+            <span data-strict>嚴格</span><span data-loose hidden>寬鬆</span>
+          </button>
+        </span>
+        <div class="value" id="targetValue">${s.targetMetRate}%</div>
+        <div class="sub" id="targetSub">${s.targetMetDays} / ${s.completeDays != null ? s.completeDays : s.totalDays} 完整日達標${s.partialDays ? ` · 另 ${s.partialDays} 部分日` : ''}</div>
       </div>
     </div>
 
@@ -450,10 +468,10 @@ function render(data, offline) {
         </tr></thead>
         <tbody>
           ${d.slice().reverse().map(row => `
-            <tr>
-              <td>${row.date.slice(5)}</td>
-              <td>${row.morningSBP?`${row.morningSBP}/${row.morningDBP}`:'—'} <span class="muted">(${row.morningCount})</span></td>
-              <td>${row.eveningSBP?`${row.eveningSBP}/${row.eveningDBP}`:'—'} <span class="muted">(${row.eveningCount})</span></td>
+            <tr class="${row.isComplete === false ? 'partial-day' : ''}" title="${row.isComplete === false ? '部分日：僅量測單段' : ''}">
+              <td>${row.date.slice(5)}${row.isComplete === false ? ' <span class="partial-mark" title="部分量測日">⚠️</span>' : ''}</td>
+              <td>${row.morningSBP?`${row.morningSBP}/${row.morningDBP}`:'<span class="missing">未量</span>'} ${row.morningSBP ? `<span class="muted">(${row.morningCount})</span>` : ''}</td>
+              <td>${row.eveningSBP?`${row.eveningSBP}/${row.eveningDBP}`:'<span class="missing">未量</span>'} ${row.eveningSBP ? `<span class="muted">(${row.eveningCount})</span>` : ''}</td>
               <td><strong>${row.dailySBP?`${row.dailySBP}/${row.dailyDBP}`:'—'}</strong></td>
               <td>${row.dailyPulse ? row.dailyPulse + ' bpm' : '—'}</td>
               <td>${row.morningSurge !== null ? (row.morningSurge>0?'+':'')+row.morningSurge : '—'}</td>
@@ -470,6 +488,46 @@ function render(data, offline) {
   `;
   drawChart(d, s.targetSBP);
   window._lastDaily = d;
+  window._lastSummary = s;
+  applyTargetMode();   // 依用戶偏好的嚴格/寬鬆設定重新渲染達標卡
+  // 切換鈕事件（render 重生成的 DOM）
+  const tBtn = document.getElementById('modeToggle');
+  if (tBtn) tBtn.addEventListener('click', () => {
+    const cur = localStorage.getItem('bp.targetMode') || 'strict';
+    localStorage.setItem('bp.targetMode', cur === 'strict' ? 'loose' : 'strict');
+    applyTargetMode();
+  });
+}
+
+function applyTargetMode() {
+  const s = window._lastSummary;
+  if (!s) return;
+  const mode = localStorage.getItem('bp.targetMode') || 'strict';
+  const valueEl = document.getElementById('targetValue');
+  const subEl = document.getElementById('targetSub');
+  const btn = document.getElementById('modeToggle');
+  if (!valueEl || !subEl) return;
+  if (mode === 'loose') {
+    valueEl.innerText = (s.targetMetRateLoose != null ? s.targetMetRateLoose : s.targetMetRate) + '%';
+    subEl.innerText = `${s.targetMetDaysLoose != null ? s.targetMetDaysLoose : s.targetMetDays} / ${s.totalDays} 量測日達標·寬鬆`;
+  } else {
+    valueEl.innerText = s.targetMetRate + '%';
+    const c = s.completeDays != null ? s.completeDays : s.totalDays;
+    subEl.innerText = `${s.targetMetDays} / ${c} 完整日達標${s.partialDays ? ` · 另 ${s.partialDays} 部分日` : ''}`;
+  }
+  if (btn) {
+    btn.querySelector('[data-strict]').hidden = (mode === 'loose');
+    btn.querySelector('[data-loose]').hidden = (mode !== 'loose');
+  }
+  // 同步達標卡隨之變化顏色
+  const card = document.getElementById('targetCard');
+  if (card) {
+    const rate = (mode === 'loose')
+      ? (s.targetMetRateLoose != null ? s.targetMetRateLoose : s.targetMetRate)
+      : s.targetMetRate;
+    card.classList.toggle('ok', rate >= 80);
+    card.classList.toggle('warn', rate < 80);
+  }
 }
 
 function drawChart(daily, targetSBP) {
