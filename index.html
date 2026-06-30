@@ -445,7 +445,7 @@
     </form>
 
     <p class="footer-note">提醒：本工具僅供居家紀錄參考，不取代正式醫療診斷與病歷系統。</p>
-    <p class="footer-note" style="opacity:.5">build v2.18 · 達標率定義卷</p>
+    <p class="footer-note" style="opacity:.5">build v2.19 · 拉全量修復資料遺漏</p>
   </section>
 
   <!-- ====== 歷史紀錄 ====== -->
@@ -900,7 +900,7 @@ async function sync(verbose=false) {
 /* ---------- v2.10: 從 Sheet 拉回歷史 ----------
  * 目的：換裝置、刪過網站資料、重訿 PWA 後，首頁這邊也能看到 Sheet 上的舊資料。
  * 策略：拉最新 N 筆→以 clientId 為主鍵 merge 進 LS_SYNCED→去重保留 200 筆。 */
-const PULL_LIMIT = 50;
+const PULL_LIMIT = 200;  // ~50 天完整資料（一日 4 筆）；stats.html 另拉 500
 async function pullFromSheet(verbose=false) {
   if (!ENDPOINT.includes('/exec')) return;
   if (!navigator.onLine) return;

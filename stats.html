@@ -249,7 +249,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-const ENDPOINT = 'https://script.google.com/macros/s/REPLACE_WITH_YOUR_DEPLOYMENT_ID/exec';
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwp5HNnP_kXJ4yIfqQ-ct4aU2LYG2D9QwAxO5ZpVjJnupw7pI9GB22qAJQVsummTKbLfQ/exec';
 const LS_THEME = 'bp.theme';
 
 /* Theme */
@@ -274,6 +274,35 @@ let currentFrom = null;  // 'YYYY-MM-DD'
 let currentTo = null;
 let chart = null;
 
+// 全量拉取上限—讓本機計算不再受 50 筆限制
+// 預計 500 筆 = ~125 天完整資料（一日 4 筆），足以涵蓋「今年迄今」等長期區間
+const STATS_PULL_LIMIT = 500;
+
+// 從 Sheet 拉全量資料下來 → 合併到 localStorage(bp.synced) → 避免資料遺漏
+async function pullFullForStats() {
+  if (!ENDPOINT.includes('/exec') || ENDPOINT.includes('REPLACE_WITH_YOUR_DEPLOYMENT_ID')) {
+    console.warn('ENDPOINT 未設定，跳過全量拉取');
+    return false;
+  }
+  try {
+    const res = await fetch(`${ENDPOINT}?action=list&limit=${STATS_PULL_LIMIT}`);
+    const data = await res.json();
+    if (!data.ok || !Array.isArray(data.records)) return false;
+    // 以 id 為主鍵，與本地 queue/synced 合併去重（sheet 資料為權威）
+    const local = JSON.parse(localStorage.getItem('bp.synced') || '[]');
+    const map = new Map();
+    local.forEach(r => { if (r && r.id) map.set(r.id, r); });
+    data.records.forEach(r => { if (r && r.id) map.set(r.id, r); }); // sheet 覆蓋
+    const merged = Array.from(map.values())
+      .sort((a,b) => String(a.recordedAt).localeCompare(String(b.recordedAt)));
+    localStorage.setItem('bp.synced', JSON.stringify(merged));
+    return true;
+  } catch (err) {
+    console.warn('pullFullForStats failed:', err);
+    return false;
+  }
+}
+
 async function loadStats(range, from, to) {
   $('#content').innerHTML = '<div class="loading">載入中…</div>';
   let url = `${ENDPOINT}?action=stats`;
@@ -283,9 +312,13 @@ async function loadStats(range, from, to) {
     const res = await fetch(url);
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'SERVER_ERROR');
+    // 後端計算成功 — 同時背景拉一次全量並合併本機，讓「離線」狀態也能看到完整資料
+    pullFullForStats().catch(()=>{});
     render(data, false);
   } catch (err) {
-    console.warn('API 失敗，改用本機資料：', err);
+    console.warn('API 失敗，試著拉全量後本機計算：', err);
+    // 本機 fallback 前先拉全量，避免 50 筆截斷造成資料消失
+    await pullFullForStats();
     render(computeLocalStats(range, from, to), true);
   }
 }
