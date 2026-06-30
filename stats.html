@@ -114,10 +114,19 @@
   .pulse-section { margin-top: var(--space-5); padding-top: var(--space-5);
                    border-top: 1px solid color-mix(in oklab, var(--color-text) 8%, transparent); }
   .pulse-section h3 { margin: 0 0 var(--space-3); font-size: var(--text-base); font-weight: 700; }
-  .mode-toggle { margin-left: 0.4rem; padding: 0.1rem 0.5rem; font-size: 0.7rem; font-weight: 600;
-                 border: 1px solid var(--color-border); border-radius: 999px;
-                 background: var(--color-surface); color: var(--color-text-muted); cursor: pointer; }
-  .mode-toggle:hover { background: var(--color-surface-offset); }
+  /* 達標率口徑切換 — 嚴格（綠）與寬鬆（藍）兩色區分 */
+  .mode-toggle { margin-left: 0.4rem; padding: 0.15rem 0.55rem; font-size: 0.7rem; font-weight: 700;
+                 border-radius: 999px; cursor: pointer; letter-spacing: 0.04em;
+                 transition: background 0.15s, border-color 0.15s, color 0.15s; }
+  .mode-toggle.is-strict { border: 1px solid color-mix(in oklab, var(--color-success) 50%, transparent);
+                           background: color-mix(in oklab, var(--color-success) 14%, transparent);
+                           color: var(--color-success); }
+  .mode-toggle.is-loose  { border: 1px solid color-mix(in oklab, var(--color-blue) 50%, transparent);
+                           background: color-mix(in oklab, var(--color-blue) 14%, transparent);
+                           color: var(--color-blue); }
+  .mode-toggle:hover { filter: brightness(1.05); }
+  /* 達標卡本身也隨模式加輔助邊框 */
+  .kpi.target.is-loose-mode { box-shadow: inset 4px 0 0 0 var(--color-blue); }
   tr.partial-day { background: color-mix(in oklab, var(--color-warning) 4%, transparent); }
   tr.partial-day td { font-style: italic; }
   .partial-mark { font-size: 0.8em; opacity: 0.8; }
@@ -403,8 +412,8 @@ function render(data, offline) {
       </div>
       <div class="kpi target ${targetOK?'ok':'warn'}" id="targetCard">
         <span class="label">達標率
-          <button id="modeToggle" class="mode-toggle" title="切換完整量測日 / 所有量測日">
-            <span data-strict>嚴格</span><span data-loose hidden>寬鬆</span>
+          <button id="modeToggle" class="mode-toggle is-strict" title="點擊切換：嚴格（只計完整量測日）↔寬鬆（包含漏量日）">
+            <span id="modeLabel">嚴格</span>
           </button>
         </span>
         <div class="value" id="targetValue">${s.targetMetRate}%</div>
@@ -507,26 +516,32 @@ function applyTargetMode() {
   const subEl = document.getElementById('targetSub');
   const btn = document.getElementById('modeToggle');
   if (!valueEl || !subEl) return;
-  if (mode === 'loose') {
-    valueEl.innerText = (s.targetMetRateLoose != null ? s.targetMetRateLoose : s.targetMetRate) + '%';
-    subEl.innerText = `${s.targetMetDaysLoose != null ? s.targetMetDaysLoose : s.targetMetDays} / ${s.totalDays} 量測日達標·寬鬆`;
-  } else {
-    valueEl.innerText = s.targetMetRate + '%';
-    const c = s.completeDays != null ? s.completeDays : s.totalDays;
-    subEl.innerText = `${s.targetMetDays} / ${c} 完整日達標${s.partialDays ? ` · 另 ${s.partialDays} 部分日` : ''}`;
-  }
-  if (btn) {
-    btn.querySelector('[data-strict]').hidden = (mode === 'loose');
-    btn.querySelector('[data-loose]').hidden = (mode !== 'loose');
-  }
-  // 同步達標卡隨之變化顏色
   const card = document.getElementById('targetCard');
-  if (card) {
-    const rate = (mode === 'loose')
-      ? (s.targetMetRateLoose != null ? s.targetMetRateLoose : s.targetMetRate)
-      : s.targetMetRate;
-    card.classList.toggle('ok', rate >= 80);
-    card.classList.toggle('warn', rate < 80);
+  const label = document.getElementById('modeLabel');
+  if (mode === 'loose') {
+    const rate = (s.targetMetRateLoose != null ? s.targetMetRateLoose : s.targetMetRate);
+    const num  = (s.targetMetDaysLoose != null ? s.targetMetDaysLoose : s.targetMetDays);
+    valueEl.innerText = rate + '%';
+    subEl.innerText   = `${num} / ${s.totalDays} 量測日達標（含部分日）`;
+    if (label) label.innerText = '寬鬆';
+    if (btn)   { btn.classList.remove('is-strict'); btn.classList.add('is-loose'); }
+    if (card)  {
+      card.classList.add('is-loose-mode');
+      card.classList.toggle('ok',   rate >= 80);
+      card.classList.toggle('warn', rate <  80);
+    }
+  } else {
+    const rate = s.targetMetRate;
+    const c    = s.completeDays != null ? s.completeDays : s.totalDays;
+    valueEl.innerText = rate + '%';
+    subEl.innerText   = `${s.targetMetDays} / ${c} 完整日達標${s.partialDays ? ` · 另有 ${s.partialDays} 部分日未計入` : ''}`;
+    if (label) label.innerText = '嚴格';
+    if (btn)   { btn.classList.remove('is-loose'); btn.classList.add('is-strict'); }
+    if (card)  {
+      card.classList.remove('is-loose-mode');
+      card.classList.toggle('ok',   rate >= 80);
+      card.classList.toggle('warn', rate <  80);
+    }
   }
 }
 
