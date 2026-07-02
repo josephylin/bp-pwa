@@ -335,7 +335,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-const ENDPOINT = 'https://script.google.com/macros/s/REPLACE_WITH_YOUR_DEPLOYMENT_ID/exec';
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwp5HNnP_kXJ4yIfqQ-ct4aU2LYG2D9QwAxO5ZpVjJnupw7pI9GB22qAJQVsummTKbLfQ/exec';
 const LS_THEME = 'bp.theme';
 
 /* Theme */
@@ -490,10 +490,13 @@ function computeLocalStats(range, fromStr, toStr) {
   };
   const PULSE_LOW = 60, PULSE_HIGH = 100;
   const dpv = daily.map(d=>d.dailyPulse).filter(v=>typeof v === 'number');
+  // 紀錄筆數——只算這個期間中實際屬於早晨/晚間的量測筆數（daily 已經過期間過濾）
+  // 不使用 all.length，因為 all 包含全部拉回的資料（可能遠遠超過選取期間）
+  const rangeRecordCount = daily.reduce((sum, day) => sum + (day.morningCount || 0) + (day.eveningCount || 0), 0);
   return {
     ok:true, range, generatedAt:new Date().toISOString(),
     summary: {
-      count: all.length, totalDays: daily.length,
+      count: rangeRecordCount, totalDays: daily.length,
       avgMorningSBP: mean(daily,'morningSBP'), avgMorningDBP: mean(daily,'morningDBP'),
       avgEveningSBP: mean(daily,'eveningSBP'), avgEveningDBP: mean(daily,'eveningDBP'),
       avgDailySBP:   mean(daily,'dailySBP'),   avgDailyDBP:   mean(daily,'dailyDBP'),

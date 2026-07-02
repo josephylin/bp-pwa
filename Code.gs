@@ -19,7 +19,7 @@
 // ============ 設定 ============
 const SHEET_NAME       = '血壓紀錄';
 const SUMMARY_SHEET    = '每日彙整';
-const SHARED_SECRET    = 'CHANGE_ME_to_a_random_string';
+const SHARED_SECRET    = 'CHANGE_LIN_to_a_random_string';
 
 // ⏰ 時區：所有寫入 Sheet 的時間都以此為準（不受 Apps Script 預設或試算表時區影響）
 //    台灣請保留 'Asia/Taipei'；如出差到日本可暫時改為 'Asia/Tokyo'
@@ -244,8 +244,14 @@ function _buildStats(params) {
   const dailyPulseValues = daily.map(function(d){return d.dailyPulse;}).filter(function(v){return typeof v === 'number';});
   const pulseInRangeDays = dailyPulseValues.filter(function(v){return v >= PULSE_LOW && v <= PULSE_HIGH;}).length;
 
+  // 紀錄筆數——只算這個期間中實際屬於早晨/晚間的量測筆數（daily 已經過期間過濾）
+  // 不使用 data.length（那是整張試算表的列數，包含全部歷史資料）
+  const rangeRecordCount = daily.reduce(function(sum, d) {
+    return sum + (d.morningCount || 0) + (d.eveningCount || 0);
+  }, 0);
+
   const summary = {
-    count: data.length,
+    count: rangeRecordCount,
     totalDays: daily.length,
     avgMorningSBP: sumOf(daily, 'morningSBP'),
     avgMorningDBP: sumOf(daily, 'morningDBP'),
