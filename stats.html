@@ -196,10 +196,84 @@
     .brand h1 { font-size: 1.4rem; }
     .actions { flex-direction: column; }
   }
+  /* ================== 列印專用樣式 ================== */
+  /* 螢幕上：隱藏 .print-only；列印時：隱藏 .screen-only */
+  .print-only  { display: none; }
   @media print {
-    body { background: white; }
-    .icon-btn, .actions, .range-tabs { display: none !important; }
-    .panel { box-shadow: none; border-color: #ccc; page-break-inside: avoid; }
+    @page { size: A4 portrait; margin: 12mm 12mm 15mm; }
+    /* 基本重置 */
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+        color-adjust: exact !important; }
+    body { background: white; color: #000; font-size: 10.5pt; line-height: 1.4; }
+    .print-only { display: block !important; }
+    .screen-only, .icon-btn, .actions.screen-only,
+    .range-tabs, .custom-range, .target-def,
+    .topbar, .pill { display: none !important; }
+    .app { padding: 0; margin: 0; }
+    .panel { box-shadow: none; border: none; padding: 0; margin: 0; }
+
+    /* 列印標題區 */
+    .print-header { margin-bottom: 6mm; }
+    .print-title-row { text-align: center; border-bottom: 2px solid #000; padding-bottom: 2mm; margin-bottom: 4mm; }
+    .print-title { font-size: 16pt; font-weight: 700; margin: 0; letter-spacing: 0.05em; }
+    .print-title-sub { font-size: 8pt; color: #555; margin-top: 1mm; font-style: italic; }
+
+    /* 病患資訊表 */
+    .print-info { width: 100%; border-collapse: collapse; margin-bottom: 4mm; font-size: 9.5pt; }
+    .print-info th, .print-info td { border: 1px solid #666; padding: 1.6mm 2.5mm; text-align: left; vertical-align: middle; }
+    .print-info th { background: #f0f0f0; font-weight: 600; width: 18%; }
+    .print-info td { width: 32%; }
+    .blank-field { display: inline-block; min-width: 24mm; border-bottom: 1px solid #888; }
+
+    /* 關鍵指標區 */
+    .print-key-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; margin-bottom: 4mm; }
+    .pm-block { border: 1px solid #666; padding: 2mm 2.5mm; page-break-inside: avoid; }
+    .pm-label { font-size: 8.5pt; color: #555; margin-bottom: 1mm; }
+    .pm-value { font-size: 13pt; font-weight: 700; }
+    .pm-unit { font-size: 9pt; font-weight: 400; color: #555; }
+    .pm-alt { font-size: 8.5pt; font-weight: 400; color: #666; }
+    .pm-sub { font-size: 8pt; color: #666; margin-top: 1mm; line-height: 1.3; }
+
+    /* 晨峰提示 */
+    .print-surge { border: 1px solid #666; background: #fafafa; padding: 2mm 3mm; margin-bottom: 3mm; font-size: 9pt; }
+
+    /* 達標定義 */
+    .print-definition { border: 1px solid #666; padding: 2mm 3mm; margin-bottom: 5mm; font-size: 8.8pt; page-break-inside: avoid; }
+    .print-def-title { font-weight: 700; margin-bottom: 1mm; }
+    .print-definition ul { margin: 0; padding-left: 4mm; }
+    .print-definition li { margin-bottom: 0.6mm; line-height: 1.4; }
+
+    /* 圖表縮小 */
+    canvas { max-height: 55mm !important; height: 55mm !important; }
+
+    /* KPI 卡 — 列印時隱藏上方螢幕版（用 print-key-metrics 取代） */
+    .kpi-grid, .pulse-section { display: none !important; }
+
+    /* 每日明細表 */
+    table { font-size: 8.5pt; page-break-inside: auto; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    th, td { border: 1px solid #666 !important; padding: 1.2mm 2mm; }
+    th { background: #f0f0f0 !important; }
+    tr.partial-day { background: #fff8e1 !important; }
+    tr.partial-day td { font-style: normal; }
+    .partial-mark { font-size: 0.85em; }
+    .missing { color: #888; }
+    .badge-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+    .badge-dot.ok  { background: #2e7d32 !important; }
+    .badge-dot.no  { background: #c62828 !important; }
+
+    /* 醫師備註區 + 簽名區 */
+    .print-footer { margin-top: 6mm; page-break-inside: avoid; }
+    .print-notes { margin-bottom: 5mm; }
+    .print-notes-label { font-weight: 700; margin-bottom: 2mm; font-size: 9.5pt; }
+    .print-notes-lines .line { border-bottom: 1px solid #999; height: 6mm; }
+    .print-signature { display: grid; grid-template-columns: 2fr 1fr; gap: 6mm; margin-bottom: 4mm; }
+    .sig-box { }
+    .sig-label { font-size: 9pt; color: #555; margin-bottom: 1mm; }
+    .sig-line { border-bottom: 1.5px solid #000; height: 10mm; }
+    .print-disclaimer { font-size: 7.5pt; color: #666; line-height: 1.4;
+                        border-top: 1px solid #ccc; padding-top: 2mm; }
   }
 </style>
 </head>
@@ -249,7 +323,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwp5HNnP_kXJ4yIfqQ-ct4aU2LYG2D9QwAxO5ZpVjJnupw7pI9GB22qAJQVsummTKbLfQ/exec';
+const ENDPOINT = 'https://script.google.com/macros/s/REPLACE_WITH_YOUR_DEPLOYMENT_ID/exec';
 const LS_THEME = 'bp.theme';
 
 /* Theme */
@@ -450,8 +524,12 @@ function render(data, offline) {
   const targetOK = s.avgDailySBP && s.avgDailyDBP && s.avgDailySBP < s.targetSBP && s.avgDailyDBP < s.targetDBP;
   const surgeWarn = s.avgMorningSurge !== null && s.avgMorningSurge >= 20;
 
+  // 列印專用標題—螢幕上隱藏，列印時顯現
+  const printHeader = renderPrintHeader(s, d);
+
   $('#content').innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;">
+    ${printHeader}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;" class="screen-only">
       <div>
         <h2 style="margin:0;font-size:var(--text-lg);">期間摘要</h2>
         <p class="muted" style="margin:0.25rem 0 0;font-size:var(--text-sm);">
@@ -502,7 +580,7 @@ function render(data, offline) {
     </details>
 
     ${s.avgMorningSurge !== null ? `
-      <div class="muted" style="margin-top:1rem;font-size:var(--text-sm);">
+      <div class="muted screen-only" style="margin-top:1rem;font-size:var(--text-sm);">
         平均晨峰 (Morning Surge) =
         <strong>${s.avgMorningSurge > 0 ? '+' : ''}${s.avgMorningSurge} mmHg</strong>
         ${surgeWarn ? '<span class="warn-text"> · 偏高，建議與醫師討論</span>' : ''}
@@ -574,9 +652,43 @@ function render(data, offline) {
       </table>
     </div>
 
-    <div class="actions">
-      <button class="btn btn-secondary" onclick="exportCSV()">匯出 CSV</button>
-      <button class="btn btn-secondary" onclick="window.print()">列印給醫師</button>
+    <!-- 列印專用：醫師備註 + 簽名區 -->
+    <div class="print-only print-footer">
+      <div class="print-notes">
+        <div class="print-notes-label">醫師備註 / 用藥調整：</div>
+        <div class="print-notes-lines">
+          <div class="line"></div>
+          <div class="line"></div>
+          <div class="line"></div>
+          <div class="line"></div>
+        </div>
+      </div>
+      <div class="print-signature">
+        <div class="sig-box">
+          <div class="sig-label">醫師簽名</div>
+          <div class="sig-line"></div>
+        </div>
+        <div class="sig-box">
+          <div class="sig-label">日期</div>
+          <div class="sig-line"></div>
+        </div>
+      </div>
+      <div class="print-disclaimer">
+        資料來源：居家自測血壓（HBPM）· 兩次平均。本報告僅供醫療參考，不取代專業診斷。
+        達標參考：台灣高血壓學會 2022 ≤ 130/80 mmHg；AHA 靜息心率 60–100 bpm。
+      </div>
+    </div>
+
+    <div class="actions screen-only" style="flex-direction:column;align-items:stretch;gap:0.5rem;">
+      <label class="muted" style="font-size:var(--text-sm);display:flex;gap:0.5rem;align-items:center;">
+        <span>列印姓名（選填，本機保存）</span>
+        <input id="patientNameInput" type="text" placeholder="例：林──" maxlength="20"
+               style="flex:1;padding:0.4rem 0.6rem;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);font-size:var(--text-sm);">
+      </label>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="exportCSV()">匯出 CSV</button>
+        <button class="btn btn-secondary" onclick="printReport()">列印給醫師</button>
+      </div>
     </div>
   `;
   drawChart(d, s.targetSBP);
@@ -593,6 +705,17 @@ function render(data, offline) {
   if (tBtn) tBtn.addEventListener('click', toggleMode);
   const pBtn = document.getElementById('pulseModeToggle');
   if (pBtn) pBtn.addEventListener('click', toggleMode);
+
+  // 病患姓名 input — 載入既有值、即時回寫 localStorage
+  const nameInput = document.getElementById('patientNameInput');
+  if (nameInput) {
+    nameInput.value = localStorage.getItem('bp.patient.name') || '';
+    nameInput.addEventListener('input', e => {
+      const v = e.target.value.trim();
+      if (v) localStorage.setItem('bp.patient.name', v);
+      else   localStorage.removeItem('bp.patient.name');
+    });
+  }
 }
 
 function applyTargetMode() {
@@ -707,6 +830,99 @@ function drawChart(daily, targetSBP) {
       }
     }
   });
+}
+
+// 列印專用標題：病患基本資訊、期間、產出時間、達標定義
+function renderPrintHeader(s, d) {
+  // 期間文字
+  const dates = d.map(x => x.date).filter(Boolean).sort();
+  const periodStart = dates[0] || '—';
+  const periodEnd = dates[dates.length - 1] || '—';
+  const periodDays = d.length;
+
+  // 區間名稱
+  let rangeLabel;
+  if (currentRange === 'custom' && currentFrom && currentTo) {
+    rangeLabel = `自訂範圍：${currentFrom} – ${currentTo}`;
+  } else if (currentRange === 'week')  rangeLabel = '最近 7 天';
+  else if (currentRange === 'month')   rangeLabel = '最近 30 天';
+  else if (currentRange === 'all')     rangeLabel = '全部紀錄';
+  else rangeLabel = '未知期間';
+
+  // 產出時間（台灣時間）
+  const now = new Date();
+  const genTime = now.getFullYear() + '/' +
+                  String(now.getMonth()+1).padStart(2,'0') + '/' +
+                  String(now.getDate()).padStart(2,'0') + ' ' +
+                  String(now.getHours()).padStart(2,'0') + ':' +
+                  String(now.getMinutes()).padStart(2,'0');
+
+  // 從 localStorage 讀病患名（可選）
+  const patientName = localStorage.getItem('bp.patient.name') || '';
+
+  return `
+    <div class="print-header print-only">
+      <div class="print-title-row">
+        <h1 class="print-title">居家血壓監測報告</h1>
+        <div class="print-title-sub">Home Blood Pressure Monitoring Report</div>
+      </div>
+      <table class="print-info">
+        <tr>
+          <th>姓名</th><td>${patientName || '<span class="blank-field">      </span>'}</td>
+          <th>報告產出</th><td>${genTime}</td>
+        </tr>
+        <tr>
+          <th>量測期間</th><td>${periodStart} – ${periodEnd}</td>
+          <th>選取區間</th><td>${rangeLabel}</td>
+        </tr>
+        <tr>
+          <th>量測日數</th><td>${periodDays} 天（完整 ${s.completeDays || 0} 天 / 部分 ${s.partialDays || 0} 天）</td>
+          <th>紀錄筆數</th><td>${s.count || 0} 筆</td>
+        </tr>
+      </table>
+
+      <div class="print-key-metrics">
+        <div class="pm-block">
+          <div class="pm-label">日均血壓</div>
+          <div class="pm-value">${s.avgDailySBP ?? '—'} / ${s.avgDailyDBP ?? '—'} <span class="pm-unit">mmHg</span></div>
+          <div class="pm-sub">早 ${s.avgMorningSBP ?? '—'}/${s.avgMorningDBP ?? '—'} · 晚 ${s.avgEveningSBP ?? '—'}/${s.avgEveningDBP ?? '—'}</div>
+        </div>
+        <div class="pm-block">
+          <div class="pm-label">日均心跳</div>
+          <div class="pm-value">${s.avgDailyPulse ?? '—'} <span class="pm-unit">bpm</span></div>
+          <div class="pm-sub">最高 ${s.maxPulse ?? '—'} · 最低 ${s.minPulse ?? '—'}</div>
+        </div>
+        <div class="pm-block">
+          <div class="pm-label">血壓達標率</div>
+          <div class="pm-value">${s.targetMetRate ?? 0}<span class="pm-unit">%</span> <span class="pm-alt">（寬鬆 ${s.targetMetRateLoose ?? 0}%）</span></div>
+          <div class="pm-sub">嚴格 ${s.targetMetDays ?? 0}/${s.completeDays ?? 0} 完整日 · 寬鬆 ${s.targetMetDaysLoose ?? 0}/${d.length} 量測日</div>
+        </div>
+        <div class="pm-block">
+          <div class="pm-label">心跳達標率</div>
+          <div class="pm-value">${s.pulseMetRate ?? 0}<span class="pm-unit">%</span> <span class="pm-alt">（寬鬆 ${s.pulseMetRateLoose ?? 0}%）</span></div>
+          <div class="pm-sub">嚴格 ${s.pulseMetDays ?? 0}/${s.completeDays ?? 0} 完整日 · 寬鬆 ${s.pulseMetDaysLoose ?? 0}/${d.length} 量測日</div>
+        </div>
+      </div>
+
+      ${s.avgMorningSurge !== null ? `
+        <div class="print-surge">平均晨峰 Morning Surge = <strong>${s.avgMorningSurge > 0 ? '+' : ''}${s.avgMorningSurge} mmHg</strong>　（早峰 ≥ 20 mmHg 可能提高心血管風險、建議醫師評估）
+        </div>` : ''}
+
+      <div class="print-definition">
+        <div class="print-def-title">達標率計算口徑：</div>
+        <ul>
+          <li><strong>嚴格達標率</strong>：完整量測日（早+晚都量）中達標的天數 ÷ 完整量測日總數</li>
+          <li><strong>寬鬆達標率</strong>：所有量測日（含只量一段的部分日）中達標的天數 ÷ 所有量測日總數</li>
+          <li>達標判定：日均血壓 ≤ ${s.targetSBP}/${s.targetDBP} mmHg；日均心跳 60–100 bpm</li>
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
+function printReport() {
+  // 確保渲染已完成—略延遲避免 Chart.js 尚未畫完
+  setTimeout(() => window.print(), 100);
 }
 
 function exportCSV() {

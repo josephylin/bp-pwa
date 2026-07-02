@@ -5,7 +5,7 @@
  *   - Apps Script API：直接 bypass，不過 SW
  *   - 新版安裝完成會主動 postMessage 通知頁面，由頁面決定要不要彈出「發現新版」提示
  */
-const CACHE = 'bp-pwa-v2.19';  // 🔄 統計拉全量 500 筆 + 首頁 200 筆，修復資料遺漏
+const CACHE = 'bp-pwa-v2.20';  // 🔄 醫師列印報告：病患資訊、期間、達標定義、簽名區
 const ASSETS = [
   './',
   './index.html',
