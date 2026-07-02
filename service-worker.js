@@ -5,7 +5,7 @@
  *   - Apps Script API：直接 bypass，不過 SW
  *   - 新版安裝完成會主動 postMessage 通知頁面，由頁面決定要不要彈出「發現新版」提示
  */
-const CACHE = 'bp-pwa-v2.20';  // 🔄 醫師列印報告：病患資訊、期間、達標定義、簽名區
+const CACHE = 'bp-pwa-v2.21';  // 🔄 列印強制白底：不管螢幕夜間深色還是 light，列印一律白底高對比
 const ASSETS = [
   './',
   './index.html',

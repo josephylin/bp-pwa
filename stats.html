@@ -201,16 +201,28 @@
   .print-only  { display: none; }
   @media print {
     @page { size: A4 portrait; margin: 12mm 12mm 15mm; }
+    /* 強制白底 — 不管螢幕目前是 light 還是 dark，列印統一用白底黑字，
+       避免浪費印表機碳粉、也保證醫師看到的報告一致 */
+    :root, [data-theme="dark"], [data-theme="light"] {
+      --color-bg: #ffffff !important;
+      --color-surface: #ffffff !important;
+      --color-surface-2: #ffffff !important;
+      --color-surface-offset: #f5f5f5 !important;
+      --color-text: #000000 !important;
+      --color-text-muted: #444444 !important;
+      --color-border: #666666 !important;
+    }
+    html, body { background: #ffffff !important; color: #000000 !important; }
     /* 基本重置 */
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
         color-adjust: exact !important; }
-    body { background: white; color: #000; font-size: 10.5pt; line-height: 1.4; }
+    body { font-size: 10.5pt; line-height: 1.4; }
     .print-only { display: block !important; }
     .screen-only, .icon-btn, .actions.screen-only,
     .range-tabs, .custom-range, .target-def,
     .topbar, .pill { display: none !important; }
-    .app { padding: 0; margin: 0; }
-    .panel { box-shadow: none; border: none; padding: 0; margin: 0; }
+    .app { padding: 0; margin: 0; background: #ffffff !important; }
+    .panel { box-shadow: none; border: none; padding: 0; margin: 0; background: #ffffff !important; }
 
     /* 列印標題區 */
     .print-header { margin-bottom: 6mm; }
@@ -785,48 +797,52 @@ function applyTargetMode() {
   }
 }
 
-function drawChart(daily, targetSBP) {
+function drawChart(daily, targetSBP, overrideColors) {
+  // overrideColors （列印時傳入）可於不切主題的情況下強制使用白底高對比色盤
+  const C = overrideColors || COLORS;
+  const pulseColor = overrideColors ? (overrideColors.pulse || '#c62828') : '#c8456f';
   const ctx = document.getElementById('chart').getContext('2d');
   if (chart) chart.destroy();
   Chart.defaults.font.family = "'Satoshi','Inter',-apple-system,'PingFang TC',sans-serif";
-  Chart.defaults.color = COLORS.text;
+  Chart.defaults.color = C.text;
   chart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: daily.map(d => d.date.slice(5)),
       datasets: [
         { label: '早晨 SBP', data: daily.map(d => d.morningSBP),
-          borderColor: COLORS.morning, backgroundColor: COLORS.morning,
+          borderColor: C.morning, backgroundColor: C.morning,
           tension: 0.25, spanGaps: true, pointRadius: 3, borderWidth: 2 },
         { label: '晚間 SBP', data: daily.map(d => d.eveningSBP),
-          borderColor: COLORS.evening, backgroundColor: COLORS.evening,
+          borderColor: C.evening, backgroundColor: C.evening,
           tension: 0.25, spanGaps: true, pointRadius: 3, borderWidth: 2 },
         { label: '日均 SBP', data: daily.map(d => d.dailySBP),
-          borderColor: COLORS.daily, backgroundColor: COLORS.daily,
+          borderColor: C.daily, backgroundColor: C.daily,
           tension: 0.25, spanGaps: true, pointRadius: 4, borderWidth: 2.5 },
         { label: `目標 ${targetSBP}`, data: daily.map(() => targetSBP),
-          borderColor: COLORS.target, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0,
+          borderColor: C.target, borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0,
           yAxisID: 'y' },
         { label: '日均心跳', data: daily.map(d => d.dailyPulse),
-          borderColor: '#c8456f', backgroundColor: '#c8456f',
+          borderColor: pulseColor, backgroundColor: pulseColor,
           borderDash: [3, 3], tension: 0.25, spanGaps: true, pointRadius: 2.5, borderWidth: 1.8,
           yAxisID: 'yPulse' }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      animation: overrideColors ? false : undefined,   // 列印重畫時關動畫——避免 window.print() 抓不到完圖
       plugins: { legend: { display: false } },
       scales: {
         y: { suggestedMin: 90, suggestedMax: 170, position: 'left',
-             title: { display: true, text: 'mmHg', color: COLORS.axis, font: { weight: 700 } },
-             grid: { color: COLORS.grid },
-             ticks: { color: COLORS.axis, font: { weight: 600, size: 11 } } },
+             title: { display: true, text: 'mmHg', color: C.axis, font: { weight: 700 } },
+             grid: { color: C.grid },
+             ticks: { color: C.axis, font: { weight: 600, size: 11 } } },
         yPulse: { suggestedMin: 50, suggestedMax: 110, position: 'right',
-             title: { display: true, text: 'bpm', color: '#c8456f', font: { weight: 700 } },
+             title: { display: true, text: 'bpm', color: pulseColor, font: { weight: 700 } },
              grid: { display: false },
-             ticks: { color: '#c8456f', font: { weight: 600, size: 11 } } },
-        x: { grid: { color: COLORS.grid },
-             ticks: { color: COLORS.axis, font: { weight: 600, size: 11 } } }
+             ticks: { color: pulseColor, font: { weight: 600, size: 11 } } },
+        x: { grid: { color: C.grid },
+             ticks: { color: C.axis, font: { weight: 600, size: 11 } } }
       }
     }
   });
@@ -920,9 +936,36 @@ function renderPrintHeader(s, d) {
   `;
 }
 
+// 列印用的 light 色盤（永遠白底黑字、線條顏色顯著）
+const PRINT_COLORS = {
+  morning: '#964219', evening: '#006494', daily: '#01696f', pulse: '#c62828',
+  target: '#8d8a83', grid: 'rgba(0,0,0,0.15)', text: '#000000', axis: '#000000'
+};
+
 function printReport() {
-  // 確保渲染已完成—略延遲避免 Chart.js 尚未畫完
-  setTimeout(() => window.print(), 100);
+  // 列印前：暫時把主題切回 light，並用列印用的高對比色重畫圖表——
+  //          不管使用者目前螢幕是夜間深色還是 light，列印都得到白底報告
+  const prevTheme = document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme', 'light');
+
+  // 以列印色盤重畫 Chart（圖表顏色在建立時就確定，不會因 CSS 而變）
+  const daily = window._lastDaily;
+  const summary = window._lastSummary;
+  if (daily && summary && typeof drawChart === 'function') {
+    drawChart(daily, summary.targetSBP, PRINT_COLORS);
+  }
+
+  // 略延確保 Chart.js 重畫完成再呼叫列印對話框
+  setTimeout(() => {
+    window.print();
+    // 列印對話關閉後還原主題與圖表顏色
+    setTimeout(() => {
+      if (prevTheme) document.documentElement.setAttribute('data-theme', prevTheme);
+      if (daily && summary && typeof drawChart === 'function') {
+        drawChart(daily, summary.targetSBP);
+      }
+    }, 300);
+  }, 200);
 }
 
 function exportCSV() {
